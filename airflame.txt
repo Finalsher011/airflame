@@ -1,0 +1,170 @@
+
+-- AIRFIREGUNS | NPC ESP
+-- Para ambiente Roblox próprio / LocalScript
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+local ESP = {
+    Box = false,
+    Skeleton = false,
+    Line = false,
+    Name = false,
+    MaxDistance = 1000,
+    Color = Color3.fromRGB(0, 220, 235)
+}
+
+local Objects = {}
+local Connections = {}
+
+local function isNPC(model)
+    if not model:IsA("Model") then return false end
+    if Players:GetPlayerFromCharacter(model) then return false end
+
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    local root = model:FindFirstChild("HumanoidRootPart")
+
+    return hum ~= nil and root ~= nil and hum.Health > 0
+end
+
+local function clearNPC(model)
+    local data = Objects[model]
+    if not data then return end
+
+    for _, object in ipairs(data) do
+        if object and object.Parent then
+            object:Destroy()
+        end
+    end
+
+    Objects[model] = nil
+end
+
+local function createNPC(model)
+    if Objects[model] or not isNPC(model) then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "AFG_NPCHighlight"
+    highlight.Adornee = model
+    highlight.FillTransparency = 1
+    highlight.OutlineTransparency = 0
+    highlight.OutlineColor = ESP.Color
+    highlight.Enabled = ESP.Box
+    highlight.Parent = model
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "AFG_NPCName"
+    billboard.Adornee = model:FindFirstChild("Head")
+        or model:FindFirstChild("HumanoidRootPart")
+    billboard.Size = UDim2.fromOffset(180, 35)
+    billboard.StudsOffset = Vector3.new(0, 2.8, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Enabled = ESP.Name
+    billboard.Parent = model
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.fromScale(1, 1)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = ESP.Color
+    label.TextStrokeTransparency = 0.2
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 13
+    label.Parent = billboard
+
+    Objects[model] = {highlight, billboard, label}
+end
+
+local function updateNPC(model, data)
+    if not model.Parent or not isNPC(model) then
+        clearNPC(model)
+        return
+    end
+
+    local root = model:FindFirstChild("HumanoidRootPart")
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    local distance = (Camera.CFrame.Position - root.Position).Magnitude
+    local visible = distance <= ESP.MaxDistance
+
+    local highlight = data[1]
+    local billboard = data[2]
+    local label = data[3]
+
+    highlight.Enabled = ESP.Box and visible
+    highlight.OutlineColor = ESP.Color
+
+    billboard.Enabled = ESP.Name and visible
+    label.Text = string.format(
+        "%s | %d studs | %d%% HP",
+        model.Name,
+        distance,
+        hum.Health / math.max(hum.MaxHealth, 1) * 100
+    )
+    label.TextColor3 = ESP.Color
+end
+
+local function scanNPCs()
+    for _, object in ipairs(Workspace:GetDescendants()) do
+        if isNPC(object) then
+            createNPC(object)
+        end
+    end
+end
+
+local function setESP(option, enabled)
+    ESP[option] = enabled
+
+    if option == "Box" then
+        for model, data in pairs(Objects) do
+            if data[1] then
+                data[1].Enabled = enabled
+            end
+        end
+    elseif option == "Name" then
+        for model, data in pairs(Objects) do
+            if data[2] then
+                data[2].Enabled = enabled
+            end
+        end
+    end
+end
+
+-- Controles para conectar aos botões do painel:
+-- setESP("Box", true/false)
+-- setESP("Name", true/false)
+-- setESP("Skeleton", true/false)
+-- setESP("Line", true/false)
+
+-- Exemplo de ativação:
+setESP("Box", true)
+setESP("Name", true)
+
+scanNPCs()
+
+Connections.scan = RunService.Heartbeat:Connect(function()
+    if not ESP.Box and not ESP.Name then return end
+
+    scanNPCs()
+
+    for model, data in pairs(Objects) do
+        updateNPC(model, data)
+    end
+end)
+
+-- Desligamento completo:
+local function destroyESP()
+    for model in pairs(Objects) do
+        clearNPC(model)
+    end
+
+    for _, connection in pairs(Connections) do
+        connection:Disconnect()
+    end
+
+    table.clear(Connections)
+end
+
+-- Para encerrar: destroyESP()
