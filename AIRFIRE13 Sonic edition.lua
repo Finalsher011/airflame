@@ -1,5 +1,4 @@
--- Trex Hub · Sonic Edition
--- Base lógica: AirFireGuns V11 · UI redesenhada com tema Sonic
+-- Sonic Hub · V12 (Correções de ESP, Aimbot, UI e Loading 2D)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -19,7 +18,7 @@ local Config = {
 }
 
 if shared.AFG_Cleanup then pcall(shared.AFG_Cleanup) end
-for _, n in ipairs({"AirFireGuns", "AirFireGunsOverlay", "AirFireGunsLoading"}) do
+for _, n in ipairs({"SonicHub", "SonicHubOverlay", "SonicHubLoading"}) do
     local o = PlayerGui:FindFirstChild(n); if o then o:Destroy() end
 end
 
@@ -42,16 +41,17 @@ local function viewportMouse()
 end
 
 -- ============================================================
--- PALETA SONIC
+-- PALETA SONIC CORRIGIDA
 -- ============================================================
 local P = {
     bg        = Color3.fromRGB(15, 20, 35),
-    title     = Color3.fromRGB(0, 100, 200),
+    title     = Color3.fromRGB(0, 90, 180),
     panel     = Color3.fromRGB(20, 35, 60),
     panelDark = Color3.fromRGB(15, 25, 45),
     card      = Color3.fromRGB(25, 45, 80),
     cardHead  = Color3.fromRGB(35, 60, 105),
-    ink       = Color3.fromRGB(240, 245, 255),
+    ink       = Color3.fromRGB(15, 20, 35), -- Cor escura para texto em fundos claros
+    text      = Color3.fromRGB(240, 245, 255), -- Cor clara para fundos escuros
     sub       = Color3.fromRGB(140, 170, 210),
     red       = Color3.fromRGB(230, 40, 50),
     yellow    = Color3.fromRGB(255, 200, 0),
@@ -74,88 +74,34 @@ local SONIC_COLORS = {
 
 local SONIC_SPRITES = {
     ring = {
-        ".YYYYYYYYYY.",
-        "YY........YY",
-        "Y..........Y",
-        "Y..........Y",
-        "Y..........Y",
-        "Y..........Y",
-        "Y..........Y",
-        "Y..........Y",
-        "Y..........Y",
-        "YY........YY",
-        ".YYYYYYYYYY.",
-        "............",
+        ".YYYYYYYYYY.", "YY........YY", "Y..........Y", "Y..........Y",
+        "Y..........Y", "Y..........Y", "Y..........Y", "Y..........Y",
+        "Y..........Y", "YY........YY", ".YYYYYYYYYY.", "............",
     },
     emerald = {
-        "....GGGG....",
-        "...GgggG....",
-        "..GgggggG...",
-        ".GgggggggG..",
-        "GgggggggggG.",
-        ".GgggggggG..",
-        "..GgggggG...",
-        "...GgggG....",
-        "....GGGG....",
-        "............",
-        "............",
-        "............",
+        "....GGGG....", "...GgggG....", "..GgggggG...", ".GgggggggG..",
+        "GgggggggggG.", ".GgggggggG..", "..GgggggG...", "...GgggG....",
+        "....GGGG....", "............", "............", "............",
     },
     shoe = {
-        "............",
-        "...RRRRRR...",
-        "..RRRRRRRR..",
-        "..RRRRRRRR..",
-        "..WWWWWWWW..",
-        "..RRRRRRRR..",
-        "..RRRRRRRR..",
-        "...RRRRRR...",
-        "............",
-        "............",
-        "............",
-        "............",
+        "............", "...RRRRRR...", "..RRRRRRRR..", "..RRRRRRRR..",
+        "..WWWWWWWW..", "..RRRRRRRR..", "..RRRRRRRR..", "...RRRRRR...",
+        "............", "............", "............", "............",
     },
     sonic = {
-        "....BBBB....",
-        "...BBBBBB...",
-        "..BBWBBWBB..",
-        "..BBWBBWBB..",
-        "..BBBBBBBB..",
-        "..BBBBBBBB..",
-        "...BBBBBB...",
-        "....BBBB....",
-        "............",
-        "............",
-        "............",
-        "............",
+        "....BBBB....", "...BBBBBB...", "..BBWBBWBB..", "..BBWBBWBB..",
+        "..BBBBBBBB..", "..BBBBBBBB..", "...BBBBBB...", "....BBBB....",
+        "............", "............", "............", "............",
     },
     tails = {
-        "............",
-        "...OOOOOO...",
-        "..OOOOOOOO..",
-        "..OOWOOWOO..",
-        "..OOOOOOOO..",
-        "...OOOOOO...",
-        "....OOOO....",
-        "............",
-        "............",
-        "............",
-        "............",
-        "............",
+        "............", "...OOOOOO...", "..OOOOOOOO..", "..OOWOOWOO..",
+        "..OOOOOOOO..", "...OOOOOO...", "....OOOO....", "............",
+        "............", "............", "............", "............",
     },
     knuckles = {
-        "............",
-        "...RRRRRR...",
-        "..RRRRRRRR..",
-        "..RRWRRWRR..",
-        "..RRRRRRRR..",
-        "...RRRRRR...",
-        "....RRRR....",
-        "............",
-        "............",
-        "............",
-        "............",
-        "............",
+        "............", "...RRRRRR...", "..RRRRRRRR..", "..RRWRRWRR..",
+        "..RRRRRRRR..", "...RRRRRR...", "....RRRR....", "............",
+        "............", "............", "............", "............",
     },
 }
 
@@ -166,11 +112,11 @@ local function new(cls, props, parent)
     return i
 end
 local function corner(i, r) return new("UICorner", {CornerRadius = UDim.new(0, r)}, i) end
-local function outline(i, t, c) return new("UIStroke", {Color = c or P.ink, Thickness = t or 2}, i) end
+local function outline(i, t, c) return new("UIStroke", {Color = c or P.text, Thickness = t or 2}, i) end
 local function label(parent, props)
     props.BackgroundTransparency = 1
     props.Font = props.Font or Enum.Font.GothamBold
-    props.TextColor3 = props.TextColor3 or P.ink
+    props.TextColor3 = props.TextColor3 or P.text
     props.TextSize = props.TextSize or 12
     props.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Left
     return new("TextLabel", props, parent)
@@ -178,6 +124,7 @@ end
 local TWEEN_INFO = TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 local function tween(inst, props) TweenService:Create(inst, TWEEN_INFO, props):Play() end
 
+-- Renderizador de Sprite (Pixel Art) Corrigido
 local function createSprite(parent, name, size)
     local holder = new("Frame", {Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1}, parent)
     local art = SONIC_SPRITES[name]
@@ -190,11 +137,11 @@ local function createSprite(parent, name, size)
         while x <= cols do
             local char = line:sub(x, x)
             if char ~= "." then
-                local color = SONIC_COLORS[char] or Color3.new(0,0,0)
                 local w = 1
                 while x + w <= cols and line:sub(x+w, x+w) == char do
                     w = w + 1
                 end
+                local color = SONIC_COLORS[char] or Color3.new(0,0,0)
                 new("Frame", {
                     Size = UDim2.fromScale(w/cols, 1/rows),
                     Position = UDim2.fromScale((x-1)/cols, (y-1)/rows),
@@ -211,39 +158,76 @@ local function createSprite(parent, name, size)
 end
 
 -- ============================================================
--- TELA DE LOADING (Sonic Ring)
+-- TELA DE LOADING (Sonic no Loop)
 -- ============================================================
-local LoadingGui = new("ScreenGui", {Name = "AirFireGunsLoading", ResetOnSpawn = false, DisplayOrder = 999, IgnoreGuiInset = true}, PlayerGui)
-local LoadFrame = new("Frame", {Size = UDim2.fromOffset(300, 120), Position = UDim2.new(0.5, 0, 0.5, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.bg, BorderSizePixel = 0}, LoadingGui)
+local LoadingGui = new("ScreenGui", {Name = "SonicHubLoading", ResetOnSpawn = false, DisplayOrder = 999, IgnoreGuiInset = true}, PlayerGui)
+local LoadFrame = new("Frame", {Size = UDim2.fromOffset(400, 200), Position = UDim2.new(0.5, 0, 0.5, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.bg, BorderSizePixel = 0}, LoadingGui)
 corner(LoadFrame, 12); outline(LoadFrame, 3, P.yellow)
 
-local ringHolder = new("Frame", {Size = UDim2.fromOffset(50, 50), Position = UDim2.new(0.5, 0, 0.25, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1}, LoadFrame)
-local ring = new("Frame", {Size = UDim2.fromOffset(40, 40), Position = UDim2.fromOffset(5, 5), BackgroundColor3 = P.yellow, BorderSizePixel = 0}, ringHolder)
-corner(ring, 20); outline(ring, 3, P.ink)
-local hole = new("Frame", {Size = UDim2.fromOffset(18, 18), Position = UDim2.fromOffset(11, 11), BackgroundColor3 = P.bg, BorderSizePixel = 0}, ring)
-corner(hole, 9)
+local track = new("Frame", {Size = UDim2.new(1, 0, 0, 4), Position = UDim2.new(0, 0, 0.6, 0), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
 
-local loadText = label(LoadFrame, {Size = UDim2.new(1, 0, 0, 24), Position = UDim2.new(0, 0, 0.55, 0), Text = "Carregando... 0%", TextSize = 16, TextXAlignment = Enum.TextXAlignment.Center, Font = Enum.Font.FredokaOne, TextColor3 = P.white})
+-- Desenho do loop (anel de pista)
+local loopBg = new("Frame", {Size = UDim2.fromOffset(80, 80), Position = UDim2.new(0.5, 30, 0.6, -80), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
+corner(loopBg, 40)
+local loopHole = new("Frame", {Size = UDim2.fromOffset(50, 50), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.bg, BorderSizePixel = 0}, loopBg)
+corner(loopHole, 25)
+local loopTrack = new("Frame", {Size = UDim2.fromOffset(80, 4), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.track, BorderSizePixel = 0}, loopBg)
 
-local barBg = new("Frame", {Size = UDim2.fromOffset(220, 10), Position = UDim2.new(0.5, 0, 0.8, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
-corner(barBg, 5); outline(barBg, 2, P.ink)
-local barFill = new("Frame", {Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = P.blue, BorderSizePixel = 0}, barBg)
-corner(barFill, 5)
+-- Sprite do Sonic (simplificado)
+local sonicRun = new("Frame", {Size = UDim2.fromOffset(24, 24), Position = UDim2.new(0, 20, 0.6, -24), BackgroundTransparency = 1}, LoadFrame)
+local sBody = new("Frame", {Size = UDim2.fromOffset(16, 16), Position = UDim2.fromOffset(4, 0), BackgroundColor3 = P.blue, BorderSizePixel = 0}, sonicRun); corner(sBody, 8)
+local sHead = new("Frame", {Size = UDim2.fromOffset(12, 12), Position = UDim2.fromOffset(6, 4), BackgroundColor3 = P.blue, BorderSizePixel = 0}, sonicRun); corner(sHead, 6)
+local sShoe = new("Frame", {Size = UDim2.fromOffset(10, 6), Position = UDim2.fromOffset(2, 16), BackgroundColor3 = P.red, BorderSizePixel = 0}, sonicRun); corner(sShoe, 3)
+local sGlove = new("Frame", {Size = UDim2.fromOffset(6, 6), Position = UDim2.fromOffset(14, 10), BackgroundColor3 = P.white, BorderSizePixel = 0}, sonicRun); corner(sGlove, 3)
 
 local progress = 0
 local isRunning = true
 
+-- Animação do Sonic no Loop
 task.spawn(function()
+    local t = 0
     while isRunning do
-        ringHolder.Rotation = ringHolder.Rotation + 8
+        t = t + 0.08
+        local speed = 4 + (progress * 0.1)
+        
+        -- Simula o movimento no loop
+        local targetX, targetY
+        if progress < 50 then
+            targetX = 20 + (progress / 50) * 150
+            targetY = 0.6
+        else
+            -- Movimento circular no loop
+            local angle = (progress - 50) / 50 * math.pi * 2
+            targetX = 200 + math.cos(angle) * 40
+            targetY = 0.6 - (math.sin(angle) * 40 / 200) -- ajuste escala y
+        end
+        
+        sonicRun.Position = UDim2.new(0, targetX, targetY, -24)
+        
+        -- Alterna as pernas
+        if math.floor(t) % 2 == 0 then
+            sShoe.Position = UDim2.fromOffset(2, 16)
+        else
+            sShoe.Position = UDim2.fromOffset(6, 18)
+        end
+        
         task.wait(0.03)
     end
 end)
 
+local barBg = new("Frame", {Size = UDim2.fromOffset(300, 12), Position = UDim2.new(0.5, 0, 0.85, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
+corner(barBg, 6); outline(barBg, 2, P.yellow)
+
+-- Barra de progresso com anéis
+local barFill = new("Frame", {Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = P.yellow, BorderSizePixel = 0}, barBg)
+corner(barFill, 6)
+
+local loadText = label(LoadFrame, {Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 0.85, 15), Text = "Carregando... 0%", TextSize = 14, TextXAlignment = Enum.TextXAlignment.Center, Font = Enum.Font.FredokaOne, TextColor3 = P.text})
+
 task.spawn(function()
     while progress < 100 do
-        progress = math.min(progress + math.random(1, 5), 100)
-        barFill.Size = UDim2.new(progress / 100, 0, 1, 0)
+        progress = math.min(progress + math.random(1, 4), 100)
+        tween(barFill, {Size = UDim2.new(progress / 100, 0, 1, 0)})
         loadText.Text = string.format("Carregando... %d%%", progress)
         task.wait(0.1)
     end
@@ -258,16 +242,13 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- ROOT GUIS
+-- ROOT GUIS & MAIN UI
 -- ============================================================
-local GUI = new("ScreenGui", {Name = "AirFireGuns", ResetOnSpawn = false, DisplayOrder = 10, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Enabled = false}, PlayerGui)
-local Overlay = new("ScreenGui", {Name = "AirFireGunsOverlay", ResetOnSpawn = false, DisplayOrder = 5, IgnoreGuiInset = true}, PlayerGui)
+local GUI = new("ScreenGui", {Name = "SonicHub", ResetOnSpawn = false, DisplayOrder = 10, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Enabled = false}, PlayerGui)
+local Overlay = new("ScreenGui", {Name = "SonicHubOverlay", ResetOnSpawn = false, DisplayOrder = 5, IgnoreGuiInset = true}, PlayerGui)
 
--- ============================================================
--- MAIN UI
--- ============================================================
 local Main = new("Frame", {Name = "Main", Size = UDim2.fromOffset(Config.WinW, Config.WinH), Position = UDim2.new(0.5, -Config.WinW / 2, 0.5, -Config.WinH / 2), BackgroundColor3 = P.bg, BorderSizePixel = 0, ClipsDescendants = true}, GUI)
-corner(Main, 12); outline(Main, 3, P.ink); local UIScale = new("UIScale", {Scale = 1}, Main)
+corner(Main, 12); outline(Main, 3, P.text); local UIScale = new("UIScale", {Scale = 1}, Main)
 
 local TitleBar = new("Frame", {Size = UDim2.new(1, 0, 0, Config.TitleH), BackgroundColor3 = P.title, BorderSizePixel = 0}, Main)
 corner(TitleBar, 10); new("Frame", {Size = UDim2.new(1, 0, 0, 10), Position = UDim2.new(0, 0, 1, -10), BackgroundColor3 = P.title, BorderSizePixel = 0}, TitleBar)
@@ -275,11 +256,11 @@ new("Frame", {Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), B
 
 local logo = new("ImageLabel", {Size = UDim2.fromOffset(30, 30), Position = UDim2.fromOffset(10, 7), BackgroundColor3 = P.ink, Image = "rbxassetid://11523801503", ImageColor3 = P.white}, TitleBar)
 corner(logo, 15); outline(logo, 2, P.ink)
-label(TitleBar, {Size = UDim2.fromOffset(200, Config.TitleH), Position = UDim2.fromOffset(48, 0), Text = "TREX HUB", Font = Enum.Font.FredokaOne, TextSize = 24, TextColor3 = P.white, TextStrokeColor3 = P.ink, TextStrokeTransparency = 0})
+label(TitleBar, {Size = UDim2.fromOffset(200, Config.TitleH), Position = UDim2.fromOffset(48, 0), Text = "SONIC HUB", Font = Enum.Font.FredokaOne, TextSize = 24, TextColor3 = P.white, TextStrokeColor3 = P.ink, TextStrokeTransparency = 0})
 
 local function titleButton(text, color, x, onClick)
     local b = new("TextButton", {Size = UDim2.fromOffset(26, 26), Position = UDim2.new(1, x, 0.5, -13), BackgroundColor3 = color, Text = text, TextColor3 = P.ink, Font = Enum.Font.GothamBlack, TextSize = 18, AutoButtonColor = false}, TitleBar)
-    corner(b, 8); outline(b, 2.5, P.ink); b.MouseButton1Click:Connect(onClick); return b
+    corner(b, 8); outline(b, 2.5, P.text); b.MouseButton1Click:Connect(onClick); return b
 end
 titleButton("-", P.yellow, -66, function() end)
 titleButton("x", P.red, -34, function() GUI:Destroy() end)
@@ -290,14 +271,14 @@ new("Frame", {Size = UDim2.new(1, 0, 0, 3), BackgroundColor3 = P.green, BorderSi
 local usableH = (Config.WinH - Config.TitleH) - Config.FooterH - 12
 
 local Sidebar = new("Frame", {Position = UDim2.fromOffset(6, 6), Size = UDim2.fromOffset(170, usableH), BackgroundColor3 = P.panel, BorderSizePixel = 0}, Body)
-corner(Sidebar, 10); outline(Sidebar, 2.5, P.ink)
+corner(Sidebar, 10); outline(Sidebar, 2.5, P.text)
 local NavList = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, -54), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y}, Sidebar)
 new("UIListLayout", {Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder}, NavList); new("UIPadding", {PaddingTop = UDim.new(0, 8), PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6)}, NavList)
 
 local ContentArea = new("Frame", {Position = UDim2.fromOffset(184, 6), Size = UDim2.fromOffset(Config.WinW - 190, usableH), BackgroundTransparency = 1}, Body)
 local PageTitle = label(ContentArea, {Size = UDim2.new(0.55, 0, 0, 26), Position = UDim2.fromOffset(6, 2), Text = "", Font = Enum.Font.FredokaOne, TextSize = 24})
 local PageSub = label(ContentArea, {Size = UDim2.new(0.55, 0, 0, 18), Position = UDim2.fromOffset(6, 32), Text = "", Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = P.sub})
-local Scroll = new("ScrollingFrame", {Position = UDim2.fromOffset(0, 56), Size = UDim2.new(1, 0, 1, -56), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 4, ScrollBarImageColor3 = P.ink, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y}, ContentArea)
+local Scroll = new("ScrollingFrame", {Position = UDim2.fromOffset(0, 56), Size = UDim2.new(1, 0, 1, -56), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 4, ScrollBarImageColor3 = P.text, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y}, ContentArea)
 new("UIPadding", {PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 8), PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 10)}, Scroll)
 
 -- ============================================================
@@ -323,7 +304,7 @@ connect(UserInputService.InputEnded, function(input)
 end)
 
 -- ============================================================
--- BUILDERS & WIDGETS
+-- BUILDERS & WIDGETS (Correção de Cores)
 -- ============================================================
 local registry, infoRows, cardRows, currentCard = {}, {}, {}, nil
 local function register(row, item)
@@ -380,7 +361,7 @@ local function rowDropdown(body, item)
     local blk = textBlock(row, item, 1); blk.LayoutOrder = 1
     local box = new("TextButton", {Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = P.white, Text = "", AutoButtonColor = false, LayoutOrder = 2}, row)
     corner(box, 8); outline(box, 2.5, P.ink)
-    local valLbl = label(box, {Size = UDim2.new(1, -42, 1, 0), Position = UDim2.fromOffset(12, 0), Text = tostring(preferences[item.key]), TextSize = 13, TextColor3 = P.ink})
+    local valLbl = label(box, {Size = UDim2.new(1, -42, 1, 0), Position = UDim2.fromOffset(12, 0), Text = tostring(preferences[item.key]), TextSize = 13, TextColor3 = P.ink}) -- Corrigido texto escuro no fundo branco
     local arrow = new("Frame", {Size = UDim2.fromOffset(22, 22), Position = UDim2.new(1, -28, 0.5, -11), BackgroundColor3 = P.red, BorderSizePixel = 0}, box)
     corner(arrow, 6); outline(arrow, 2.5, P.ink); label(arrow, {Size = UDim2.new(1, 0, 1, 0), Text = "v", TextColor3 = P.white, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Center, Font = Enum.Font.GothamBlack})
     local list = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = P.white, Visible = false, LayoutOrder = 3}, row)
@@ -388,7 +369,7 @@ local function rowDropdown(body, item)
     local optBtns = {}
     local function render() valLbl.Text = tostring(preferences[item.key]); for opt, b in pairs(optBtns) do b.TextColor3 = preferences[item.key] == opt and P.red or P.ink end end
     for i, opt in ipairs(item.options) do
-        local b = new("TextButton", {Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, Text = "   " .. opt, Font = Enum.Font.GothamBold, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false, LayoutOrder = i}, list)
+        local b = new("TextButton", {Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, Text = "   " .. opt, Font = Enum.Font.GothamBold, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false, LayoutOrder = i, TextColor3 = P.ink}, list)
         optBtns[opt] = b; b.MouseButton1Click:Connect(function() setPref(item.key, opt); list.Visible = false; render() end)
     end
     box.MouseButton1Click:Connect(function() list.Visible = not list.Visible end); render(); register(row, item)
@@ -399,7 +380,7 @@ local function rowSlider(body, item)
     new("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder}, row)
     local top = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 1}, row)
     textBlock(top, item, 0.72)
-    local valLbl = label(top, {Size = UDim2.fromOffset(80, 17), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), TextColor3 = P.red, TextXAlignment = Enum.TextXAlignment.Right, TextSize = 13})
+    local valLbl = label(top, {Size = UDim2.fromOffset(80, 17), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), TextColor3 = P.yellow, TextXAlignment = Enum.TextXAlignment.Right, TextSize = 13})
     local holder = new("TextButton", {Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, Text = "", LayoutOrder = 2}, row)
     local track = new("Frame", {Size = UDim2.new(1, -14, 0, 8), Position = UDim2.new(0, 7, 0.5, -4), BackgroundColor3 = P.track, BorderSizePixel = 0}, holder)
     corner(track, 4); outline(track, 2, P.ink)
@@ -425,8 +406,8 @@ end
 
 local function rowInfo(body, item)
     local row = newRow(body, 22)
-    label(row, {Size = UDim2.new(0.6, 0, 1, 0), Text = item.label, TextSize = 13, TextColor3 = P.ink})
-    local value = label(row, {Size = UDim2.new(0.4, 0, 1, 0), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), Text = item.get(), TextColor3 = P.red, TextXAlignment = Enum.TextXAlignment.Right, Font = Enum.Font.GothamBold})
+    label(row, {Size = UDim2.new(0.6, 0, 1, 0), Text = item.label, TextSize = 13, TextColor3 = P.text})
+    local value = label(row, {Size = UDim2.new(0.4, 0, 1, 0), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), Text = item.get(), TextColor3 = P.yellow, TextXAlignment = Enum.TextXAlignment.Right, Font = Enum.Font.GothamBold})
     table.insert(infoRows, {label = value, get = item.get}); register(row, item)
 end
 
@@ -446,7 +427,7 @@ local builders = {toggle = rowToggle, check = rowCheck, dropdown = rowDropdown, 
 
 local function makeCard(parent, spec)
     local card = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = P.card, BorderSizePixel = 0, ClipsDescendants = true}, parent)
-    corner(card, 10); outline(card, 2.5, P.ink); new("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder}, card)
+    corner(card, 10); outline(card, 2.5, P.text); new("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder}, card)
     local head = new("TextButton", {Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = P.cardHead, Text = "", AutoButtonColor = false, LayoutOrder = 1}, card)
     corner(head, 10); new("Frame", {Size = UDim2.new(1, 0, 0, 10), Position = UDim2.new(0, 0, 1, -10), BackgroundColor3 = P.cardHead, BorderSizePixel = 0}, head)
     new("Frame", {Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = P.ink, BorderSizePixel = 0}, head)
@@ -460,14 +441,14 @@ local function makeCard(parent, spec)
 end
 
 -- ============================================================
--- CONFIGURAÇÕES DE PÁGINAS
+-- CONFIGURAÇÕES E PÁGINAS
 -- ============================================================
 local AIM_PARTS = {Head = {"Head"}, Torso = {"UpperTorso", "Torso"}, Root = {"HumanoidRootPart"}}
 local PRIORITIES = {"Crosshair", "Distance", "Health"}
 local KEY_MODES = {"Hold", "Toggle", "Always"}
 local ESP_COLORS = {Cyan = Color3.fromRGB(0, 210, 235), Red = Color3.fromRGB(255, 80, 90), Green = Color3.fromRGB(80, 235, 120), Yellow = Color3.fromRGB(255, 225, 80), White = Color3.fromRGB(245, 245, 245), Magenta = Color3.fromRGB(255, 90, 230)}
 local triggerCount = 0
-local targetCount = 0 -- declarado antes de pages para evitar bug de escopo
+local targetCount = 0
 
 local pages = {
     ["Main"] = {
@@ -499,7 +480,7 @@ local pages = {
     },
     ["Silent Aim"] = {
         title = "SILENT AIM", sub = "Shots find the target",
-        left = {{title = "Silent Aim", icon = P.ink, rows = {
+        left = {{title = "Silent Aim", icon = P.text, rows = {
             {type = "toggle", key = "sil.enabled", label = "Silent aim", bindKey = "sil.bind", bindValue = "None", value = false},
             {type = "slider", key = "sil.fov", label = "FOV", min = 10, max = 600, value = 360, suffix = "px"},
             {type = "slider", key = "sil.hit", label = "Hit chance", min = 0, max = 100, value = 95, suffix = "%"},
@@ -529,7 +510,7 @@ local pages = {
     },
     ["Gun Mods"] = {
         title = "GUN MODS", sub = "Weapon tweaks",
-        left = {{title = "Weapon", icon = P.ink, rows = {
+        left = {{title = "Weapon", icon = P.text, rows = {
             {type = "check", key = "gun.recoil", label = "No recoil", value = false},
             {type = "check", key = "gun.spread", label = "No spread", value = false},
             {type = "check", key = "gun.cooldown", label = "No cooldown (Infinite Ammo)", value = false}
@@ -597,7 +578,6 @@ local navLayout = {
     {section = "SETTINGS", items = {"Settings"}},
 }
 
--- Sprites dos ícones da sidebar
 local navSprites = {
     ["Main"] = "sonic",
     ["Aimbot"] = "shoe",
@@ -620,7 +600,7 @@ for _, page in pairs(pages) do
 end
 
 -- ============================================================
--- NAVEGAÇÃO E ANIMAÇÕES DE ABA
+-- NAVEGAÇÃO
 -- ============================================================
 local navButtons, activeTab = {}, nil
 local function updateInfos()
@@ -634,7 +614,6 @@ local function showPage(name)
     local page = pages[name]; if not page then return end
     activeTab = name; activeSlider = nil; captureTarget = nil
 
-    -- Fade out e destruição dos cards antigos
     for _, c in ipairs(Scroll:GetChildren()) do
         if c:IsA("GuiObject") then
             TweenService:Create(c, TweenInfo.new(0.15), {BackgroundTransparency = 1}):Play()
@@ -658,7 +637,7 @@ local function showPage(name)
     for tabName, t in pairs(navButtons) do
         local sel = tabName == name
         tween(t.btn, {BackgroundColor3 = sel and P.card or P.panel})
-        t.btn.TextColor3 = sel and P.red or P.white
+        t.btn.TextColor3 = sel and P.yellow or P.text
     end
     Scroll.CanvasPosition = Vector2.new(0, 0); updateInfos()
 end
@@ -671,10 +650,13 @@ do
         new("UIPadding", {PaddingTop = UDim.new(0, 6), PaddingLeft = UDim.new(0, 6)}, sec)
         for _, name in ipairs(group.items) do
             order += 1
-            local btn = new("TextButton", {Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = P.panel, Text = "        " .. name, TextColor3 = P.white, Font = Enum.Font.GothamBold, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false, LayoutOrder = order}, NavList)
+            local btn = new("TextButton", {Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = P.panel, Text = "        " .. name, TextColor3 = P.text, Font = Enum.Font.GothamBold, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false, LayoutOrder = order}, NavList)
             corner(btn, 8)
-            local icon = createSprite(btn, navSprites[name] or "ring", 14)
-            icon.Position = UDim2.fromOffset(10, 8)
+            
+            -- Correção do Ícone Pixelado
+            local icon = createSprite(btn, navSprites[name] or "ring", 18)
+            icon.Position = UDim2.fromOffset(8, 6)
+            
             navButtons[name] = {btn = btn, icon = icon}
             btn.MouseButton1Click:Connect(function() showPage(name) end)
         end
@@ -682,7 +664,7 @@ do
 end
 
 -- ============================================================
--- LÓGICA DE ALVO, AIMBOT, ESP (mantida do original)
+-- LÓGICA DO JOGO (Aimbot corrigido, ESP corrigido)
 -- ============================================================
 local function finiteVec(v) return v.X == v.X and v.Y == v.Y and v.Z == v.Z end
 local function smoothAlpha(sm, dt) local base = 1 / math.max(sm, 1); return 1 - (1 - base) ^ (math.clamp(dt, 0, 0.1) * 60) end
@@ -742,9 +724,6 @@ local function pickTarget(cam, o, sticky)
     return best
 end
 
--- ============================================================
--- INPUT GATE
--- ============================================================
 local windowFocused, KeyState = true, {}
 connect(UserInputService.WindowFocused, function() windowFocused = true end)
 connect(UserInputService.WindowFocusReleased, function() windowFocused = false; for _, s in pairs(KeyState) do s.down = false; s.on = false end end)
@@ -765,9 +744,7 @@ local function keyActive(id, bindName, modeName)
     s.down = down; return result
 end
 
--- ============================================================
--- AIMBOT ENGINE
--- ============================================================
+-- Aimbot Corrigido (Não puxa o boneco pra fora da tela)
 local aimSticky = nil
 local function aimbotStep(dt)
     local aiming = pref("aim.enabled", false) and keyActive("aim", pref("aim.bind", "MouseButton2"), pref("aim.mode", "Hold"))
@@ -776,12 +753,22 @@ local function aimbotStep(dt)
     if aiming then
         local names = {}; for _, n in ipairs(AIM_PARTS[pref("aim.part", "Head")] or AIM_PARTS.Head) do table.insert(names, n) end; table.insert(names, "Head")
         local target = pickTarget(cam, {names = names, fov = prefNumber("aim.fov", 150), maxDist = prefNumber("aim.dist", 2000), visible = pref("aim.visible", false) == true, priority = pref("aim.priority", "Crosshair")}, pref("aim.sticky", false) and aimSticky or nil)
+        
         if target then
             aimSticky = target.Model
-            local aimPos = target.Position; local camPos = cam.CFrame.Position
+            local aimPos = target.Position
+            local camPos = cam.CFrame.Position
+            
             if (aimPos - camPos).Magnitude > 1e-3 then
                 if cam.CameraType ~= Enum.CameraType.Scriptable then cam.CameraType = Enum.CameraType.Scriptable end
-                cam.CFrame = cam.CFrame:Lerp(CFrame.lookAt(camPos, aimPos), smoothAlpha(prefNumber("aim.smooth", 5), dt))
+                -- Mantém a posição da câmera na cabeça do jogador para não "sair da tela"
+                local char = Player.Character
+                local head = char and (char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart"))
+                if head then
+                    camPos = head.Position
+                end
+                local targetCF = CFrame.lookAt(camPos, aimPos)
+                cam.CFrame = cam.CFrame:Lerp(targetCF, smoothAlpha(prefNumber("aim.smooth", 5), dt))
             end
         else
             aimSticky = nil
@@ -793,9 +780,7 @@ local function aimbotStep(dt)
     end
 end
 
--- ============================================================
--- SILENT AIM
--- ============================================================
+-- Silent Aim
 local function silentAim()
     if not pref("sil.enabled", false) or math.random() * 100 >= prefNumber("sil.hit", 95) then return nil end
     local cam = Workspace.CurrentCamera; if not cam then return nil end
@@ -822,9 +807,7 @@ connect(UserInputService.InputBegan, function(input, processed)
     end
 end)
 
--- ============================================================
--- TRIGGER / RAGE
--- ============================================================
+-- Trigger / Rage
 local lastTriggerTime = 0
 local function triggerStep()
     local isRage = pref("rage.enabled", false)
@@ -843,9 +826,7 @@ local function triggerStep()
     end
 end
 
--- ============================================================
--- ESP DRAWING
--- ============================================================
+-- ESP Corrigido (Sem linhas malucas)
 local entries = {}
 local function newLine() return new("Frame", {AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0, Visible = false}, Overlay) end
 local function placeLine(f, a, b, thickness, color)
@@ -883,6 +864,7 @@ local function projectBox(cam, cf, size)
         any = true; minX = math.min(minX, sp.X); maxX = math.max(maxX, sp.X); minY = math.min(minY, sp.Y); maxY = math.max(maxY, sp.Y)
     end end end
     if not any then return nil end
+    -- Previne desenho em tela inteira quando o alvo está muito perto
     if (maxX - minX) > Config.MaxBoxPixels or (maxY - minY) > Config.MaxBoxPixels then return nil end
     if minX < -2000 or maxX > 2000 or minY < -2000 or maxY > 2000 then return nil end
     return Vector2.new(minX, minY), Vector2.new(maxX, maxY)
@@ -893,7 +875,10 @@ local function updateEntry(e, cam, npc, dist, o)
     if not cf or not size then hideEntry(e); return end
     local tl, br = projectBox(cam, cf, size)
     if not tl then hideEntry(e); return end
+    
     local w, h = br.X - tl.X, br.Y - tl.Y
+    if w <= 0 or h <= 0 or w > 1000 or h > 1000 then hideEntry(e); return end
+
     if o.box then
         e.Box.Position = UDim2.fromOffset(tl.X, tl.Y); e.Box.Size = UDim2.fromOffset(w, h)
         e.Stroke.Color = o.color; e.Stroke.Thickness = o.thick; e.Box.Visible = true
@@ -901,6 +886,7 @@ local function updateEntry(e, cam, npc, dist, o)
         e.Fill.Visible = o.fill
         if o.fill then e.Fill.BackgroundTransparency = 0.7 end
     else e.Box.Visible = false end
+
     local parts = {}
     if o.name then table.insert(parts, npc.Model.Name) end
     if o.dist then table.insert(parts, string.format("[%d]", dist)) end
@@ -912,23 +898,31 @@ local function updateEntry(e, cam, npc, dist, o)
         e.Label.AnchorPoint = Vector2.new(0.5, o.pos == "Top" and 1 or 0)
         e.Label.Visible = true
     else e.Label.Visible = false end
+
     if o.health and npc.Humanoid.MaxHealth > 0 then
         local frac = math.clamp(npc.Humanoid.Health / npc.Humanoid.MaxHealth, 0, 1)
         e.HealthBack.Position = UDim2.fromOffset(tl.X - 5, tl.Y); e.HealthBack.Size = UDim2.fromOffset(o.thick + 1, h)
         e.HealthFill.Size = UDim2.new(1, 0, frac, 0); e.HealthFill.BackgroundColor3 = Color3.fromRGB(255, 60, 60):Lerp(Color3.fromRGB(60, 235, 90), frac)
         e.HealthBack.Visible = true
     else e.HealthBack.Visible = false end
+
     if o.headdot then
         local head = npc.Model:FindFirstChild("Head")
         if head then local sp = cam:WorldToViewportPoint(head.Position); if sp.Z > 0 then e.HeadDot.Position = UDim2.fromOffset(sp.X, sp.Y); e.HeadDot.BackgroundColor3 = o.color; e.HeadDot.Visible = true end
         else e.HeadDot.Visible = false end
     else e.HeadDot.Visible = false end
+
+    -- Corrigido o line ESP para não bugar fora da tela
     if o.tracer then
         local foot = Vector2.new((tl.X + br.X) / 2, br.Y)
         local screenCenter = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y)
-        if tl.X > 0 and br.X < cam.ViewportSize.X then placeLine(e.Tracer, screenCenter, foot, o.thick, o.color)
-        else e.Tracer.Visible = false end
+        if tl.X > 0 and br.X < cam.ViewportSize.X and tl.Y > 0 and br.Y < cam.ViewportSize.Y then
+            placeLine(e.Tracer, screenCenter, foot, o.thick, o.color)
+        else
+            e.Tracer.Visible = false
+        end
     else e.Tracer.Visible = false end
+
     if o.skeleton then
         local bones = npc.Humanoid.RigType == Enum.HumanoidRigType.R15 and BONES_R15 or BONES_R6
         for i, pair in ipairs(bones) do
@@ -978,9 +972,7 @@ local function espStep()
     end
 end
 
--- ============================================================
--- NO COOLDOWN
--- ============================================================
+-- No Cooldown
 task.spawn(function()
     while task.wait(0.1) do
         if pref("gun.cooldown", false) and Player.Character then
@@ -989,20 +981,15 @@ task.spawn(function()
                     for _, v in pairs(tool:GetDescendants()) do
                         if v:IsA("NumberValue") and (v.Name:lower():find("cooldown") or v.Name:lower():find("firerate")) then v.Value = 0 end
                     end
-                    if type(genv().hookfunction) == "function" and tool:FindFirstChildWhichIsA("LocalScript") then
-                       -- Hook Activate se suportado
-                    end
                 end
             end
         end
     end
 end)
 
--- ============================================================
--- HUD & STATUS
--- ============================================================
+-- HUD
 local Hud = new("Frame", {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.fromOffset(0, 26), AutomaticSize = Enum.AutomaticSize.X, BackgroundColor3 = P.title, BorderSizePixel = 0}, GUI)
-corner(Hud, 13); outline(Hud, 2, P.ink); new("UIPadding", {PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14)}, Hud)
+corner(Hud, 13); outline(Hud, 2, P.text); new("UIPadding", {PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14)}, Hud)
 local HudText = label(Hud, {Size = UDim2.fromOffset(0, 26), AutomaticSize = Enum.AutomaticSize.X, Text = "", TextColor3 = P.white, TextSize = 12})
 local statusTimer, fps, startClock = 0, 60, os.clock()
 
@@ -1016,13 +1003,11 @@ local function statusStep(dt)
     if Hud.Visible then
         local t = math.floor(os.clock() - startClock); local ping = "44ms"
         pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() + 0.5) .. "ms" end)
-        HudText.Text = string.format("TREX SONIC  |  FPS %d  |  PING %s  |  TIME %02d:%02d", math.floor(fps + 0.5), ping, math.floor(t / 60), t % 60)
+        HudText.Text = string.format("SONIC HUB  |  FPS %d  |  PING %s  |  TIME %02d:%02d", math.floor(fps + 0.5), ping, math.floor(t / 60), t % 60)
     end
 end
 
--- ============================================================
--- MENU KEY & MAIN LOOP
--- ============================================================
+-- Menu Key & Main Loop
 connect(UserInputService.InputBegan, function(input, processed) if processed then return end; if input.KeyCode == Config.MenuKey then GUI.Enabled = not GUI.Enabled end end)
 
 local cleaned = false
@@ -1038,7 +1023,7 @@ shared.AFG_Cleanup = cleanup; connect(GUI.Destroying, cleanup)
 local reported = {}
 local function guarded(tag, fn, ...)
     local ok, err = pcall(fn, ...)
-    if not ok and not reported[tag] then reported[tag] = true; warn("[Trex Hub] " .. tag .. " error: " .. tostring(err)) end
+    if not ok and not reported[tag] then reported[tag] = true; warn("[Sonic Hub] " .. tag .. " error: " .. tostring(err)) end
 end
 
 RunService:BindToRenderStep("AFG_Main", Enum.RenderPriority.Camera.Value + 1, function(dt)
@@ -1053,4 +1038,4 @@ end)
 GUI.Enabled = true
 task.wait(0.4)
 showPage("Main")
-print("[Trex Hub] Sonic Edition carregado.")
+print("[Sonic Hub] V12 Carregado com sucesso.")
