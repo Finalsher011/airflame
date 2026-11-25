@@ -1,4 +1,4 @@
--- Sonic Hub · V12 (Correções de ESP, Aimbot, UI e Loading 2D)
+-- Sonic Hub · V13 (ESP Fix, Keybinds, Configs Funcionais, Loading 2D)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -7,13 +7,14 @@ local Workspace = game:GetService("Workspace")
 local Stats = game:GetService("Stats")
 local GuiService = game:GetService("GuiService")
 local VirtualUser = game:GetService("VirtualUser")
+local HttpService = game:GetService("HttpService")
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
 local Config = {
     MenuKey = Enum.KeyCode.RightShift,
-    MaxLeadSeconds = 0.25, MaxBoxPixels = 1000,
+    MaxLeadSeconds = 0.25, MaxBoxPixels = 800,
     WinW = 720, WinH = 500, TitleH = 44, FooterH = 16,
 }
 
@@ -41,7 +42,7 @@ local function viewportMouse()
 end
 
 -- ============================================================
--- PALETA SONIC CORRIGIDA
+-- PALETA SONIC & UTILS
 -- ============================================================
 local P = {
     bg        = Color3.fromRGB(15, 20, 35),
@@ -50,8 +51,8 @@ local P = {
     panelDark = Color3.fromRGB(15, 25, 45),
     card      = Color3.fromRGB(25, 45, 80),
     cardHead  = Color3.fromRGB(35, 60, 105),
-    ink       = Color3.fromRGB(15, 20, 35), -- Cor escura para texto em fundos claros
-    text      = Color3.fromRGB(240, 245, 255), -- Cor clara para fundos escuros
+    ink       = Color3.fromRGB(20, 20, 20), 
+    text      = Color3.fromRGB(240, 245, 255), 
     sub       = Color3.fromRGB(140, 170, 210),
     red       = Color3.fromRGB(230, 40, 50),
     yellow    = Color3.fromRGB(255, 200, 0),
@@ -63,46 +64,18 @@ local P = {
 }
 
 local SONIC_COLORS = {
-    Y = Color3.fromRGB(255, 200, 0),   -- anel
-    G = Color3.fromRGB(0, 150, 50),    -- esmeralda escura
-    g = Color3.fromRGB(0, 255, 100),   -- esmeralda clara
-    R = Color3.fromRGB(230, 40, 50),   -- sapato
-    W = Color3.fromRGB(255, 255, 255), -- luva
-    B = Color3.fromRGB(0, 120, 255),   -- azul Sonic
-    O = Color3.fromRGB(255, 140, 0),   -- Tails
+    Y = Color3.fromRGB(255, 200, 0), G = Color3.fromRGB(0, 150, 50), g = Color3.fromRGB(0, 255, 100),
+    R = Color3.fromRGB(230, 40, 50), W = Color3.fromRGB(255, 255, 255), B = Color3.fromRGB(0, 120, 255),
+    O = Color3.fromRGB(255, 140, 0),
 }
 
 local SONIC_SPRITES = {
-    ring = {
-        ".YYYYYYYYYY.", "YY........YY", "Y..........Y", "Y..........Y",
-        "Y..........Y", "Y..........Y", "Y..........Y", "Y..........Y",
-        "Y..........Y", "YY........YY", ".YYYYYYYYYY.", "............",
-    },
-    emerald = {
-        "....GGGG....", "...GgggG....", "..GgggggG...", ".GgggggggG..",
-        "GgggggggggG.", ".GgggggggG..", "..GgggggG...", "...GgggG....",
-        "....GGGG....", "............", "............", "............",
-    },
-    shoe = {
-        "............", "...RRRRRR...", "..RRRRRRRR..", "..RRRRRRRR..",
-        "..WWWWWWWW..", "..RRRRRRRR..", "..RRRRRRRR..", "...RRRRRR...",
-        "............", "............", "............", "............",
-    },
-    sonic = {
-        "....BBBB....", "...BBBBBB...", "..BBWBBWBB..", "..BBWBBWBB..",
-        "..BBBBBBBB..", "..BBBBBBBB..", "...BBBBBB...", "....BBBB....",
-        "............", "............", "............", "............",
-    },
-    tails = {
-        "............", "...OOOOOO...", "..OOOOOOOO..", "..OOWOOWOO..",
-        "..OOOOOOOO..", "...OOOOOO...", "....OOOO....", "............",
-        "............", "............", "............", "............",
-    },
-    knuckles = {
-        "............", "...RRRRRR...", "..RRRRRRRR..", "..RRWRRWRR..",
-        "..RRRRRRRR..", "...RRRRRR...", "....RRRR....", "............",
-        "............", "............", "............", "............",
-    },
+    ring = {".YYYYYYYYYY.", "YY........YY", "Y..........Y", "Y..........Y", "Y..........Y", "Y..........Y", "Y..........Y", "Y..........Y", "Y..........Y", "YY........YY", ".YYYYYYYYYY.", "............"},
+    emerald = {"....GGGG....", "...GgggG....", "..GgggggG...", ".GgggggggG..", "GgggggggggG.", ".GgggggggG..", "..GgggggG...", "...GgggG....", "....GGGG....", "............", "............", "............"},
+    shoe = {"............", "...RRRRRR...", "..RRRRRRRR..", "..RRRRRRRR..", "..WWWWWWWW..", "..RRRRRRRR..", "..RRRRRRRR..", "...RRRRRR...", "............", "............", "............", "............"},
+    sonic = {"....BBBB....", "...BBBBBB...", "..BBWBBWBB..", "..BBWBBWBB..", "..BBBBBBBB..", "..BBBBBBBB..", "...BBBBBB...", "....BBBB....", "............", "............", "............", "............"},
+    tails = {"............", "...OOOOOO...", "..OOOOOOOO..", "..OOWOOWOO..", "..OOOOOOOO..", "...OOOOOO...", "....OOOO....", "............", "............", "............", "............", "............"},
+    knuckles = {"............", "...RRRRRR...", "..RRRRRRRR..", "..RRWRRWRR..", "..RRRRRRRR..", "...RRRRRR...", "....RRRR....", "............", "............", "............", "............"},
 }
 
 local function new(cls, props, parent)
@@ -124,13 +97,11 @@ end
 local TWEEN_INFO = TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 local function tween(inst, props) TweenService:Create(inst, TWEEN_INFO, props):Play() end
 
--- Renderizador de Sprite (Pixel Art) Corrigido
 local function createSprite(parent, name, size)
     local holder = new("Frame", {Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1}, parent)
     local art = SONIC_SPRITES[name]
     if not art then return holder end
-    local rows = #art
-    local cols = #art[1]
+    local rows, cols = #art, #art[1]
     for y = 1, rows do
         local line = art[y]
         local x = 1
@@ -138,106 +109,75 @@ local function createSprite(parent, name, size)
             local char = line:sub(x, x)
             if char ~= "." then
                 local w = 1
-                while x + w <= cols and line:sub(x+w, x+w) == char do
-                    w = w + 1
-                end
-                local color = SONIC_COLORS[char] or Color3.new(0,0,0)
-                new("Frame", {
-                    Size = UDim2.fromScale(w/cols, 1/rows),
-                    Position = UDim2.fromScale((x-1)/cols, (y-1)/rows),
-                    BackgroundColor3 = color,
-                    BorderSizePixel = 0
-                }, holder)
+                while x + w <= cols and line:sub(x+w, x+w) == char do w = w + 1 end
+                new("Frame", {Size = UDim2.fromScale(w/cols, 1/rows), Position = UDim2.fromScale((x-1)/cols, (y-1)/rows), BackgroundColor3 = SONIC_COLORS[char], BorderSizePixel = 0}, holder)
                 x = x + w
-            else
-                x = x + 1
-            end
+            else x = x + 1 end
         end
     end
     return holder
 end
 
 -- ============================================================
--- TELA DE LOADING (Sonic no Loop)
+-- TELA DE LOADING (Fase do Sonic)
 -- ============================================================
 local LoadingGui = new("ScreenGui", {Name = "SonicHubLoading", ResetOnSpawn = false, DisplayOrder = 999, IgnoreGuiInset = true}, PlayerGui)
-local LoadFrame = new("Frame", {Size = UDim2.fromOffset(400, 200), Position = UDim2.new(0.5, 0, 0.5, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.bg, BorderSizePixel = 0}, LoadingGui)
+local LoadFrame = new("Frame", {Size = UDim2.fromOffset(450, 250), Position = UDim2.new(0.5, 0, 0.5, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.bg, BorderSizePixel = 0, ClipsDescendants = true}, LoadingGui)
 corner(LoadFrame, 12); outline(LoadFrame, 3, P.yellow)
 
-local track = new("Frame", {Size = UDim2.new(1, 0, 0, 4), Position = UDim2.new(0, 0, 0.6, 0), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
+-- Chão da fase
+local trackGround = new("Frame", {Size = UDim2.new(1, 0, 0, 60), Position = UDim2.new(0, 0, 0.65, 0), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
+local trackLine = new("Frame", {Size = UDim2.new(1, 0, 0, 4), Position = UDim2.fromScale(0, 0), BackgroundColor3 = P.yellow, BorderSizePixel = 0}, trackGround)
 
--- Desenho do loop (anel de pista)
-local loopBg = new("Frame", {Size = UDim2.fromOffset(80, 80), Position = UDim2.new(0.5, 30, 0.6, -80), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
-corner(loopBg, 40)
-local loopHole = new("Frame", {Size = UDim2.fromOffset(50, 50), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.bg, BorderSizePixel = 0}, loopBg)
-corner(loopHole, 25)
-local loopTrack = new("Frame", {Size = UDim2.fromOffset(80, 4), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.track, BorderSizePixel = 0}, loopBg)
+-- Obstáculos (Loop e Rampa)
+local loop = new("Frame", {Size = UDim2.fromOffset(120, 120), Position = UDim2.new(0.7, 0, 0.65, -120), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
+corner(loop, 60)
+local loopHole = new("Frame", {Size = UDim2.fromOffset(60, 60), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.bg, BorderSizePixel = 0}, loop)
+corner(loopHole, 30)
+local loopLine = new("Frame", {Size = UDim2.fromOffset(120, 4), Position = UDim2.fromScale(0, 0.5), AnchorPoint = Vector2.new(0, 0.5), BackgroundColor3 = P.yellow, BorderSizePixel = 0}, loop)
 
--- Sprite do Sonic (simplificado)
-local sonicRun = new("Frame", {Size = UDim2.fromOffset(24, 24), Position = UDim2.new(0, 20, 0.6, -24), BackgroundTransparency = 1}, LoadFrame)
-local sBody = new("Frame", {Size = UDim2.fromOffset(16, 16), Position = UDim2.fromOffset(4, 0), BackgroundColor3 = P.blue, BorderSizePixel = 0}, sonicRun); corner(sBody, 8)
-local sHead = new("Frame", {Size = UDim2.fromOffset(12, 12), Position = UDim2.fromOffset(6, 4), BackgroundColor3 = P.blue, BorderSizePixel = 0}, sonicRun); corner(sHead, 6)
-local sShoe = new("Frame", {Size = UDim2.fromOffset(10, 6), Position = UDim2.fromOffset(2, 16), BackgroundColor3 = P.red, BorderSizePixel = 0}, sonicRun); corner(sShoe, 3)
-local sGlove = new("Frame", {Size = UDim2.fromOffset(6, 6), Position = UDim2.fromOffset(14, 10), BackgroundColor3 = P.white, BorderSizePixel = 0}, sonicRun); corner(sGlove, 3)
+-- Sonic (Desenhado com formas limpas)
+local sonicRun = new("Frame", {Size = UDim2.fromOffset(30, 40), Position = UDim2.new(0, 50, 0.65, -40), BackgroundTransparency = 1}, LoadFrame)
+local sBody = new("Frame", {Size = UDim2.fromOffset(20, 24), Position = UDim2.fromOffset(5, 6), BackgroundColor3 = P.blue, BorderSizePixel = 0}, sonicRun); corner(sBody, 10)
+local sHead = new("Frame", {Size = UDim2.fromOffset(18, 18), Position = UDim2.fromOffset(12, 0), BackgroundColor3 = P.blue, BorderSizePixel = 0}, sonicRun); corner(sHead, 9)
+local sBelly = new("Frame", {Size = UDim2.fromOffset(12, 14), Position = UDim2.fromOffset(8, 12), BackgroundColor3 = Color3.fromRGB(255, 205, 160), BorderSizePixel = 0}, sonicRun); corner(sBelly, 6)
+local sShoe = new("Frame", {Size = UDim2.fromOffset(12, 8), Position = UDim2.fromOffset(2, 32), BackgroundColor3 = P.red, BorderSizePixel = 0}, sonicRun); corner(sShoe, 4)
+local sGlove = new("Frame", {Size = UDim2.fromOffset(8, 8), Position = UDim2.fromOffset(22, 14), BackgroundColor3 = P.white, BorderSizePixel = 0}, sonicRun); corner(sGlove, 4)
 
 local progress = 0
 local isRunning = true
-
--- Animação do Sonic no Loop
 task.spawn(function()
     local t = 0
     while isRunning do
-        t = t + 0.08
-        local speed = 4 + (progress * 0.1)
-        
-        -- Simula o movimento no loop
-        local targetX, targetY
-        if progress < 50 then
-            targetX = 20 + (progress / 50) * 150
-            targetY = 0.6
-        else
-            -- Movimento circular no loop
-            local angle = (progress - 50) / 50 * math.pi * 2
-            targetX = 200 + math.cos(angle) * 40
-            targetY = 0.6 - (math.sin(angle) * 40 / 200) -- ajuste escala y
-        end
-        
-        sonicRun.Position = UDim2.new(0, targetX, targetY, -24)
-        
-        -- Alterna as pernas
-        if math.floor(t) % 2 == 0 then
-            sShoe.Position = UDim2.fromOffset(2, 16)
-        else
-            sShoe.Position = UDim2.fromOffset(6, 18)
-        end
-        
+        t = t + 0.05
+        local bob = math.sin(t * 10) * 3
+        sonicRun.Position = UDim2.new(0, 50 + (progress * 2), 0.65, -40 + bob)
+        if math.floor(t) % 2 == 0 then sShoe.Position = UDim2.fromOffset(4, 30) else sShoe.Position = UDim2.fromOffset(0, 34) end
+        loopLine.Position = UDim2.fromOffset((t * 20) % 120, 0.5)
         task.wait(0.03)
     end
 end)
 
-local barBg = new("Frame", {Size = UDim2.fromOffset(300, 12), Position = UDim2.new(0.5, 0, 0.85, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
-corner(barBg, 6); outline(barBg, 2, P.yellow)
-
--- Barra de progresso com anéis
+-- Barra de progresso (Anéis)
+local barBg = new("Frame", {Size = UDim2.fromOffset(300, 14), Position = UDim2.new(0.5, 0, 0.88, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
+corner(barBg, 7); outline(barBg, 2, P.yellow)
 local barFill = new("Frame", {Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = P.yellow, BorderSizePixel = 0}, barBg)
-corner(barFill, 6)
-
-local loadText = label(LoadFrame, {Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 0.85, 15), Text = "Carregando... 0%", TextSize = 14, TextXAlignment = Enum.TextXAlignment.Center, Font = Enum.Font.FredokaOne, TextColor3 = P.text})
+corner(barFill, 7)
+local loadText = label(LoadFrame, {Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 0.92, 0), Text = "Carregando... 0%", TextSize = 14, TextXAlignment = Enum.TextXAlignment.Center, Font = Enum.Font.FredokaOne, TextColor3 = P.text})
 
 task.spawn(function()
     while progress < 100 do
         progress = math.min(progress + math.random(1, 4), 100)
         tween(barFill, {Size = UDim2.new(progress / 100, 0, 1, 0)})
         loadText.Text = string.format("Carregando... %d%%", progress)
-        task.wait(0.1)
+        task.wait(0.05)
     end
     isRunning = false
-    task.wait(0.3)
-    TweenService:Create(LoadFrame, TweenInfo.new(0.3), {BackgroundTransparency = 1, Size = UDim2.fromOffset(0, 0)}):Play()
+    TweenService:Create(LoadFrame, TweenInfo.new(0.4), {BackgroundTransparency = 1, Size = UDim2.fromOffset(0, 0)}):Play()
     for _, v in ipairs(LoadFrame:GetDescendants()) do
-        pcall(function() TweenService:Create(v, TweenInfo.new(0.3), {BackgroundTransparency = 1, TextTransparency = 1}):Play() end)
+        pcall(function() TweenService:Create(v, TweenInfo.new(0.4), {BackgroundTransparency = 1, TextTransparency = 1}):Play() end)
     end
-    task.wait(0.35)
+    task.wait(0.45)
     LoadingGui:Destroy()
 end)
 
@@ -253,7 +193,6 @@ corner(Main, 12); outline(Main, 3, P.text); local UIScale = new("UIScale", {Scal
 local TitleBar = new("Frame", {Size = UDim2.new(1, 0, 0, Config.TitleH), BackgroundColor3 = P.title, BorderSizePixel = 0}, Main)
 corner(TitleBar, 10); new("Frame", {Size = UDim2.new(1, 0, 0, 10), Position = UDim2.new(0, 0, 1, -10), BackgroundColor3 = P.title, BorderSizePixel = 0}, TitleBar)
 new("Frame", {Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = P.ink, BorderSizePixel = 0}, TitleBar)
-
 local logo = new("ImageLabel", {Size = UDim2.fromOffset(30, 30), Position = UDim2.fromOffset(10, 7), BackgroundColor3 = P.ink, Image = "rbxassetid://11523801503", ImageColor3 = P.white}, TitleBar)
 corner(logo, 15); outline(logo, 2, P.ink)
 label(TitleBar, {Size = UDim2.fromOffset(200, Config.TitleH), Position = UDim2.fromOffset(48, 0), Text = "SONIC HUB", Font = Enum.Font.FredokaOne, TextSize = 24, TextColor3 = P.white, TextStrokeColor3 = P.ink, TextStrokeTransparency = 0})
@@ -304,9 +243,53 @@ connect(UserInputService.InputEnded, function(input)
 end)
 
 -- ============================================================
--- BUILDERS & WIDGETS (Correção de Cores)
+-- CONFIG SYSTEM (Real)
+-- ============================================================
+local configFolder = "SonicHubConfigs"
+if type(makefolder) == "function" and type(isfolder) == "function" then
+    if not isfolder(configFolder) then makefolder(configFolder) end
+end
+
+local function getConfigs()
+    local list = {}
+    if type(listfiles) == "function" and isfolder(configFolder) then
+        for _, file in ipairs(listfiles(configFolder)) do
+            if file:sub(-5) == ".json" then table.insert(list, file:sub(#configFolder + 2, -6)) end
+        end
+    end
+    return list
+end
+
+local function saveConfig(name)
+    if type(writefile) ~= "function" then return end
+    local ok, data = pcall(function() return HttpService:JSONEncode(preferences) end)
+    if ok then writefile(configFolder .. "/" .. name .. ".json", data) end
+end
+
+local function loadConfig(name)
+    if type(readfile) ~= "function" then return end
+    local path = configFolder .. "/" .. name .. ".json"
+    if isfile(path) then
+        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
+        if ok and type(data) == "table" then
+            for k, v in pairs(data) do preferences[k] = v end
+        end
+    end
+end
+
+local function deleteConfig(name)
+    if type(delfile) == "function" then
+        local path = configFolder .. "/" .. name .. ".json"
+        if isfile(path) then delfile(path) end
+    end
+end
+
+-- ============================================================
+-- BUILDERS & WIDGETS
 -- ============================================================
 local registry, infoRows, cardRows, currentCard = {}, {}, {}, nil
+local captureTarget = nil -- Variável global para capturar teclas
+
 local function register(row, item)
     local entry = {row = row, text = ((item.label or "") .. " " .. (item.desc or "")):lower(), card = currentCard}
     table.insert(registry, entry)
@@ -336,7 +319,10 @@ local function rowToggle(body, item)
     if item.bindKey then
         local chip = new("TextButton", {Size = UDim2.fromOffset(46, 24), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -54, 0.5, 0), BackgroundColor3 = P.white, Text = preferences[item.bindKey] or "None", TextColor3 = P.ink, Font = Enum.Font.GothamBold, TextSize = 10, AutoButtonColor = false}, row)
         corner(chip, 8); outline(chip, 2, P.ink)
-        chip.MouseButton1Click:Connect(function() chip.Text = "..."; captureTarget = {key = item.bindKey, button = chip} end)
+        chip.MouseButton1Click:Connect(function()
+            chip.Text = "..."
+            captureTarget = {key = item.bindKey, button = chip}
+        end)
     end
     register(row, item)
 end
@@ -361,7 +347,7 @@ local function rowDropdown(body, item)
     local blk = textBlock(row, item, 1); blk.LayoutOrder = 1
     local box = new("TextButton", {Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = P.white, Text = "", AutoButtonColor = false, LayoutOrder = 2}, row)
     corner(box, 8); outline(box, 2.5, P.ink)
-    local valLbl = label(box, {Size = UDim2.new(1, -42, 1, 0), Position = UDim2.fromOffset(12, 0), Text = tostring(preferences[item.key]), TextSize = 13, TextColor3 = P.ink}) -- Corrigido texto escuro no fundo branco
+    local valLbl = label(box, {Size = UDim2.new(1, -42, 1, 0), Position = UDim2.fromOffset(12, 0), Text = tostring(preferences[item.key]), TextSize = 13, TextColor3 = P.ink})
     local arrow = new("Frame", {Size = UDim2.fromOffset(22, 22), Position = UDim2.new(1, -28, 0.5, -11), BackgroundColor3 = P.red, BorderSizePixel = 0}, box)
     corner(arrow, 6); outline(arrow, 2.5, P.ink); label(arrow, {Size = UDim2.new(1, 0, 1, 0), Text = "v", TextColor3 = P.white, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Center, Font = Enum.Font.GothamBlack})
     local list = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = P.white, Visible = false, LayoutOrder = 3}, row)
@@ -413,14 +399,19 @@ end
 
 local function rowButtonGroup(body, item)
     local row = new("Frame", {Size = UDim2.new(1, 0, 0, 60), BackgroundTransparency = 1}, body)
-    local b1 = new("TextButton", {Size = UDim2.new(0.5, -5, 0, 26), Position = UDim2.new(0, 0, 0, 0), BackgroundColor3 = P.blue, Text = "Save", TextColor3 = P.white, Font = Enum.Font.GothamBold, TextSize = 12, AutoButtonColor = false}, row)
+    local cfgInput = new("TextBox", {Size = UDim2.new(1, 0, 0, 24), Position = UDim2.new(0, 0, 0, 0), BackgroundColor3 = P.white, Text = "", PlaceholderText = "Config name", TextColor3 = P.ink, Font = Enum.Font.Gotham, TextSize = 12}, row)
+    corner(cfgInput, 6); outline(cfgInput, 2, P.ink)
+    
+    local b1 = new("TextButton", {Size = UDim2.new(0.5, -5, 0, 26), Position = UDim2.new(0, 0, 0, 30), BackgroundColor3 = P.blue, Text = "Save", TextColor3 = P.white, Font = Enum.Font.GothamBold, TextSize = 12, AutoButtonColor = false}, row)
     corner(b1, 8); outline(b1, 2, P.ink)
-    local b2 = new("TextButton", {Size = UDim2.new(0.5, -5, 0, 26), Position = UDim2.new(0.5, 5, 0, 0), BackgroundColor3 = P.green, Text = "Load", TextColor3 = P.white, Font = Enum.Font.GothamBold, TextSize = 12, AutoButtonColor = false}, row)
+    local b2 = new("TextButton", {Size = UDim2.new(0.5, -5, 0, 26), Position = UDim2.new(0.5, 5, 0, 30), BackgroundColor3 = P.green, Text = "Load", TextColor3 = P.white, Font = Enum.Font.GothamBold, TextSize = 12, AutoButtonColor = false}, row)
     corner(b2, 8); outline(b2, 2, P.ink)
-    local b3 = new("TextButton", {Size = UDim2.new(0.5, -5, 0, 26), Position = UDim2.new(0, 0, 0, 30), BackgroundColor3 = P.red, Text = "Delete", TextColor3 = P.white, Font = Enum.Font.GothamBold, TextSize = 12, AutoButtonColor = false}, row)
+    local b3 = new("TextButton", {Size = UDim2.new(0.5, -5, 0, 26), Position = UDim2.new(0, 0, 0, 60), BackgroundColor3 = P.red, Text = "Delete", TextColor3 = P.white, Font = Enum.Font.GothamBold, TextSize = 12, AutoButtonColor = false}, row)
     corner(b3, 8); outline(b3, 2, P.ink)
-    local b4 = new("TextButton", {Size = UDim2.new(0.5, -5, 0, 26), Position = UDim2.new(0.5, 5, 0, 30), BackgroundColor3 = P.white, Text = "Refresh", TextColor3 = P.ink, Font = Enum.Font.GothamBold, TextSize = 12, AutoButtonColor = false}, row)
-    corner(b4, 8); outline(b4, 2, P.ink)
+    
+    b1.MouseButton1Click:Connect(function() if cfgInput.Text ~= "" then saveConfig(cfgInput.Text) end end)
+    b2.MouseButton1Click:Connect(function() if cfgInput.Text ~= "" then loadConfig(cfgInput.Text) showPage("Settings") end end)
+    b3.MouseButton1Click:Connect(function() if cfgInput.Text ~= "" then deleteConfig(cfgInput.Text) end end)
 end
 
 local builders = {toggle = rowToggle, check = rowCheck, dropdown = rowDropdown, slider = rowSlider, note = rowNote, info = rowInfo, btnGroup = rowButtonGroup}
@@ -513,7 +504,7 @@ local pages = {
         left = {{title = "Weapon", icon = P.text, rows = {
             {type = "check", key = "gun.recoil", label = "No recoil", value = false},
             {type = "check", key = "gun.spread", label = "No spread", value = false},
-            {type = "check", key = "gun.cooldown", label = "No cooldown (Infinite Ammo)", value = false}
+            {type = "check", key = "gun.cooldown", label = "No cooldown", value = false}
         }}},
         right = {},
     },
@@ -562,9 +553,6 @@ local pages = {
         },
         right = {
             {title = "Configs", icon = P.yellow, rows = {
-                {type = "note", text = "Config name"},
-                {type = "info", label = "Saved configs", get = function() return "leo config" end},
-                {type = "note", text = "Autoload: None"},
                 {type = "btnGroup"}
             }},
         },
@@ -579,13 +567,8 @@ local navLayout = {
 }
 
 local navSprites = {
-    ["Main"] = "sonic",
-    ["Aimbot"] = "shoe",
-    ["Silent Aim"] = "emerald",
-    ["Trigger & Rage"] = "ring",
-    ["Gun Mods"] = "knuckles",
-    ["Visuals"] = "tails",
-    ["Settings"] = "ring",
+    ["Main"] = "sonic", ["Aimbot"] = "shoe", ["Silent Aim"] = "emerald",
+    ["Trigger & Rage"] = "ring", ["Gun Mods"] = "knuckles", ["Visuals"] = "tails", ["Settings"] = "ring",
 }
 
 for _, page in pairs(pages) do
@@ -612,7 +595,7 @@ end
 
 local function showPage(name)
     local page = pages[name]; if not page then return end
-    activeTab = name; activeSlider = nil; captureTarget = nil
+    activeTab = name; activeSlider = nil
 
     for _, c in ipairs(Scroll:GetChildren()) do
         if c:IsA("GuiObject") then
@@ -652,11 +635,8 @@ do
             order += 1
             local btn = new("TextButton", {Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = P.panel, Text = "        " .. name, TextColor3 = P.text, Font = Enum.Font.GothamBold, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false, LayoutOrder = order}, NavList)
             corner(btn, 8)
-            
-            -- Correção do Ícone Pixelado
             local icon = createSprite(btn, navSprites[name] or "ring", 18)
             icon.Position = UDim2.fromOffset(8, 6)
-            
             navButtons[name] = {btn = btn, icon = icon}
             btn.MouseButton1Click:Connect(function() showPage(name) end)
         end
@@ -664,7 +644,7 @@ do
 end
 
 -- ============================================================
--- LÓGICA DO JOGO (Aimbot corrigido, ESP corrigido)
+-- LÓGICA DO JOGO
 -- ============================================================
 local function finiteVec(v) return v.X == v.X and v.Y == v.Y and v.Z == v.Z end
 local function smoothAlpha(sm, dt) local base = 1 / math.max(sm, 1); return 1 - (1 - base) ^ (math.clamp(dt, 0, 0.1) * 60) end
@@ -684,7 +664,7 @@ end
 
 local function readNpc(model)
     if not model or not model.Parent then return nil end
-    if Players:GetPlayerFromCharacter(model) then return nil end
+    if Players:GetPlayerFromCharacter(model) == Player then return nil end
     local hum = model:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return nil end
     local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
@@ -724,27 +704,69 @@ local function pickTarget(cam, o, sticky)
     return best
 end
 
+-- ============================================================
+-- INPUT SYSTEM (Binds reais)
+-- ============================================================
 local windowFocused, KeyState = true, {}
 connect(UserInputService.WindowFocused, function() windowFocused = true end)
 connect(UserInputService.WindowFocusReleased, function() windowFocused = false; for _, s in pairs(KeyState) do s.down = false; s.on = false end end)
 
+connect(UserInputService.InputBegan, function(input, processed)
+    if processed then return end
+    if captureTarget then
+        local keyName = nil
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            keyName = input.KeyCode.Name
+        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then keyName = "MouseButton1"
+        elseif input.UserInputType == Enum.UserInputType.MouseButton2 then keyName = "MouseButton2"
+        elseif input.UserInputType == Enum.UserInputType.MouseButton3 then keyName = "MouseButton3"
+        end
+        
+        if keyName then
+            setPref(captureTarget.key, keyName)
+            captureTarget.button.Text = keyName
+            captureTarget = nil
+        end
+        return
+    end
+
+    if input.KeyCode == Config.MenuKey then GUI.Enabled = not GUI.Enabled end
+end)
+
 local function keyActive(id, bindName, modeName)
     if modeName == "Always" then return windowFocused and not UserInputService:GetFocusedTextBox() end
     local s = KeyState[id] or {down = false, on = false}; KeyState[id] = s
-    local bind = nil
+    
+    local bindType, bindVal = nil, nil
     if bindName and bindName ~= "None" then
-        if bindName == "MouseButton1" or bindName == "MouseButton2" or bindName == "MouseButton3" then bind = {mouse = Enum.UserInputType[bindName]}
-        else local ok, kc = pcall(function() return Enum.KeyCode[bindName] end); if ok and kc then bind = {key = kc} end end
+        if bindName:find("MouseButton") then bindType = "mouse"; bindVal = Enum.UserInputType[bindName]
+        else 
+            local ok, kc = pcall(function() return Enum.KeyCode[bindName] end)
+            if ok and kc then bindType = "key"; bindVal = kc end
+        end
     end
-    if not bind or not windowFocused or UserInputService:GetFocusedTextBox() then s.down = false; s.on = false; return false end
-    local down = bind.mouse and UserInputService:IsMouseButtonPressed(bind.mouse) or UserInputService:IsKeyDown(bind.key)
+    
+    if not bindType or not windowFocused or UserInputService:GetFocusedTextBox() then 
+        s.down = false; s.on = false; return false 
+    end
+    
+    local down = false
+    if bindType == "mouse" then down = UserInputService:IsMouseButtonPressed(bindVal)
+    else down = UserInputService:IsKeyDown(bindVal) end
+
     local result
-    if modeName == "Toggle" then if down and not s.down then s.on = not s.on end; result = s.on
-    else s.on = false; result = down end
-    s.down = down; return result
+    if modeName == "Toggle" then 
+        if down and not s.down then s.on = not s.on end
+        result = s.on
+    else 
+        s.on = false
+        result = down 
+    end
+    s.down = down
+    return result
 end
 
--- Aimbot Corrigido (Não puxa o boneco pra fora da tela)
+-- Aimbot (Corrigido)
 local aimSticky = nil
 local function aimbotStep(dt)
     local aiming = pref("aim.enabled", false) and keyActive("aim", pref("aim.bind", "MouseButton2"), pref("aim.mode", "Hold"))
@@ -758,15 +780,11 @@ local function aimbotStep(dt)
             aimSticky = target.Model
             local aimPos = target.Position
             local camPos = cam.CFrame.Position
-            
             if (aimPos - camPos).Magnitude > 1e-3 then
                 if cam.CameraType ~= Enum.CameraType.Scriptable then cam.CameraType = Enum.CameraType.Scriptable end
-                -- Mantém a posição da câmera na cabeça do jogador para não "sair da tela"
                 local char = Player.Character
                 local head = char and (char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart"))
-                if head then
-                    camPos = head.Position
-                end
+                if head then camPos = head.Position end
                 local targetCF = CFrame.lookAt(camPos, aimPos)
                 cam.CFrame = cam.CFrame:Lerp(targetCF, smoothAlpha(prefNumber("aim.smooth", 5), dt))
             end
@@ -795,14 +813,12 @@ connect(UserInputService.InputBegan, function(input, processed)
         local hit = silentAim()
         if hit then
             local cam = Workspace.CurrentCamera
-            local oldType = cam.CameraType
-            local oldCF = cam.CFrame
+            local oldType, oldCF = cam.CameraType, cam.CFrame
             cam.CameraType = Enum.CameraType.Scriptable
             cam.CFrame = CFrame.lookAt(cam.CFrame.Position, hit.Position)
             if type(genv().mouse1click) == "function" then genv().mouse1click()
             else pcall(function() VirtualUser:Button1Down(Vector2.new(0,0)); VirtualUser:Button1Up(Vector2.new(0,0)) end) end
-            cam.CFrame = oldCF
-            cam.CameraType = oldType
+            cam.CFrame = oldCF; cam.CameraType = oldType
         end
     end
 end)
@@ -826,7 +842,7 @@ local function triggerStep()
     end
 end
 
--- ESP Corrigido (Sem linhas malucas)
+-- ESP Corrigido (Sem bug de linha maluca)
 local entries = {}
 local function newLine() return new("Frame", {AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0, Visible = false}, Overlay) end
 local function placeLine(f, a, b, thickness, color)
@@ -860,13 +876,13 @@ local function projectBox(cam, cf, size)
     for ix = -1, 1, 2 do for iy = -1, 1, 2 do for iz = -1, 1, 2 do
         local c3 = cf:PointToWorldSpace(Vector3.new(ix * size.X / 2, iy * size.Y / 2, iz * size.Z / 2))
         local sp = cam:WorldToViewportPoint(c3)
-        if sp.Z < 0 then return nil end
-        any = true; minX = math.min(minX, sp.X); maxX = math.max(maxX, sp.X); minY = math.min(minY, sp.Y); maxY = math.max(maxY, sp.Y)
+        if sp.Z > 0 then
+            any = true; minX = math.min(minX, sp.X); maxX = math.max(maxX, sp.X); minY = math.min(minY, sp.Y); maxY = math.max(maxY, sp.Y)
+        end
     end end end
     if not any then return nil end
-    -- Previne desenho em tela inteira quando o alvo está muito perto
     if (maxX - minX) > Config.MaxBoxPixels or (maxY - minY) > Config.MaxBoxPixels then return nil end
-    if minX < -2000 or maxX > 2000 or minY < -2000 or maxY > 2000 then return nil end
+    if minX < -1000 or maxX > 1000 or minY < -1000 or maxY > 1000 then return nil end
     return Vector2.new(minX, minY), Vector2.new(maxX, maxY)
 end
 
@@ -877,7 +893,7 @@ local function updateEntry(e, cam, npc, dist, o)
     if not tl then hideEntry(e); return end
     
     local w, h = br.X - tl.X, br.Y - tl.Y
-    if w <= 0 or h <= 0 or w > 1000 or h > 1000 then hideEntry(e); return end
+    if w <= 0 or h <= 0 or w > 800 or h > 800 then hideEntry(e); return end
 
     if o.box then
         e.Box.Position = UDim2.fromOffset(tl.X, tl.Y); e.Box.Size = UDim2.fromOffset(w, h)
@@ -912,7 +928,6 @@ local function updateEntry(e, cam, npc, dist, o)
         else e.HeadDot.Visible = false end
     else e.HeadDot.Visible = false end
 
-    -- Corrigido o line ESP para não bugar fora da tela
     if o.tracer then
         local foot = Vector2.new((tl.X + br.X) / 2, br.Y)
         local screenCenter = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y)
@@ -972,14 +987,16 @@ local function espStep()
     end
 end
 
--- No Cooldown
+-- No Cooldown (Ajustado)
 task.spawn(function()
     while task.wait(0.1) do
         if pref("gun.cooldown", false) and Player.Character then
             for _, tool in pairs(Player.Character:GetChildren()) do
                 if tool:IsA("Tool") then
                     for _, v in pairs(tool:GetDescendants()) do
-                        if v:IsA("NumberValue") and (v.Name:lower():find("cooldown") or v.Name:lower():find("firerate")) then v.Value = 0 end
+                        if v:IsA("NumberValue") and (v.Name:lower():find("cooldown") or v.Name:lower():find("firerate") or v.Name:lower():find("delay")) then 
+                            v.Value = 0 
+                        end
                     end
                 end
             end
@@ -1007,9 +1024,7 @@ local function statusStep(dt)
     end
 end
 
--- Menu Key & Main Loop
-connect(UserInputService.InputBegan, function(input, processed) if processed then return end; if input.KeyCode == Config.MenuKey then GUI.Enabled = not GUI.Enabled end end)
-
+-- Cleanup & Loop
 local cleaned = false
 local function cleanup()
     if cleaned then return end; cleaned = true
@@ -1038,4 +1053,4 @@ end)
 GUI.Enabled = true
 task.wait(0.4)
 showPage("Main")
-print("[Sonic Hub] V12 Carregado com sucesso.")
+print("[Sonic Hub] V13 Carregado com sucesso.")
