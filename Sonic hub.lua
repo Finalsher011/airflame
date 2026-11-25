@@ -1,4 +1,4 @@
--- Sonic Hub · V16 (Fix Sliders, Keybind Sync, Triggerbot Real, UI Sonic)
+-- Sonic Hub · V18 (Loading Screen 2D Épica + UI Fixes)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -29,8 +29,8 @@ local connections = {}
 local function connect(sig, fn) local c = sig:Connect(fn); table.insert(connections, c); return c end
 
 local preferences = {}
-local dynamicElements = {} -- Para atualizar os switches via teclado
-local activeSlider = nil     -- Variável global para o slider
+local uiRenderers = {} 
+local activeSlider = nil
 
 local function setPref(k, v) preferences[k] = v end
 local function pref(k, d) local v = preferences[k]; if v == nil then return d end; return v end
@@ -46,8 +46,16 @@ local function viewportMouse()
     return Vector2.new(m.X, m.Y) - guiInset
 end
 
+local function formatBind(val)
+    if not val or val == "None" then return "NONE" end
+    if val == "MouseButton1" then return "MB1" end
+    if val == "MouseButton2" then return "MB2" end
+    if val == "MouseButton3" then return "MB3" end
+    return val:upper()
+end
+
 -- ============================================================
--- PALETA SONIC (Mais vibrante)
+-- PALETA SONIC
 -- ============================================================
 local P = {
     bg        = Color3.fromRGB(12, 16, 28),
@@ -66,21 +74,6 @@ local P = {
     white     = Color3.fromRGB(255, 255, 255),
     track     = Color3.fromRGB(45, 65, 100),
     brick     = Color3.fromRGB(10, 15, 25),
-}
-
-local SONIC_COLORS = {
-    Y = Color3.fromRGB(255, 200, 0), G = Color3.fromRGB(0, 150, 50), g = Color3.fromRGB(0, 255, 100),
-    R = Color3.fromRGB(230, 40, 50), W = Color3.fromRGB(255, 255, 255), B = Color3.fromRGB(0, 120, 255),
-    O = Color3.fromRGB(255, 140, 0),
-}
-
-local SONIC_SPRITES = {
-    ring = {".YYYYYYYYYY.", "YY........YY", "Y..........Y", "Y..........Y", "Y..........Y", "Y..........Y", "Y..........Y", "Y..........Y", "Y..........Y", "YY........YY", ".YYYYYYYYYY.", "............"},
-    emerald = {"....GGGG....", "...GgggG....", "..GgggggG...", ".GgggggggG..", "GgggggggggG.", ".GgggggggG..", "..GgggggG...", "...GgggG....", "....GGGG....", "............", "............", "............"},
-    shoe = {"............", "...RRRRRR...", "..RRRRRRRR..", "..RRRRRRRR..", "..WWWWWWWW..", "..RRRRRRRR..", "..RRRRRRRR..", "...RRRRRR...", "............", "............", "............", "............"},
-    sonic = {"....BBBB....", "...BBBBBB...", "..BBWBBWBB..", "..BBWBBWBB..", "..BBBBBBBB..", "..BBBBBBBB..", "...BBBBBB...", "....BBBB....", "............", "............", "............", "............"},
-    tails = {"............", "...OOOOOO...", "..OOOOOOOO..", "..OOWOOWOO..", "..OOOOOOOO..", "...OOOOOO...", "....OOOO....", "............", "............", "............", "............", "............"},
-    knuckles = {"............", "...RRRRRR...", "..RRRRRRRR..", "..RRWRRWRR..", "..RRRRRRRR..", "...RRRRRR...", "....RRRR....", "............", "............", "............", "............"},
 }
 
 local function new(cls, props, parent)
@@ -102,69 +95,155 @@ end
 local TWEEN_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 local function tween(inst, props) TweenService:Create(inst, TWEEN_INFO, props):Play() end
 
-local function createSprite(parent, name, size)
-    local holder = new("Frame", {Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1}, parent)
-    local art = SONIC_SPRITES[name]
-    if not art then return holder end
-    local rows, cols = #art, #art[1]
-    for y = 1, rows do
-        local line = art[y]
-        local x = 1
-        while x <= cols do
-            local char = line:sub(x, x)
-            if char ~= "." then
-                local w = 1
-                while x + w <= cols and line:sub(x+w, x+w) == char do w = w + 1 end
-                new("Frame", {Size = UDim2.fromScale(w/cols, 1/rows), Position = UDim2.fromScale((x-1)/cols, (y-1)/rows), BackgroundColor3 = SONIC_COLORS[char], BorderSizePixel = 0}, holder)
-                x = x + w
-            else x = x + 1 end
-        end
-    end
-    return holder
-end
-
 -- ============================================================
--- LOADING SCREEN
+-- TELA DE LOADING (Arte 2D Sonic, Tails e Knuckles)
 -- ============================================================
 local LoadingGui = new("ScreenGui", {Name = "SonicHubLoading", ResetOnSpawn = false, DisplayOrder = 999, IgnoreGuiInset = true}, PlayerGui)
-local LoadFrame = new("Frame", {Size = UDim2.fromOffset(450, 200), Position = UDim2.new(0.5, 0, 0.5, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.bg, BorderSizePixel = 0, ClipsDescendants = true}, LoadingGui)
-corner(LoadFrame, 12); outline(LoadFrame, 3, P.yellow)
+local LoadFrame = new("Frame", {Size = UDim2.fromOffset(500, 250), Position = UDim2.new(0.5, 0, 0.5, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = Color3.fromRGB(30, 60, 130), BorderSizePixel = 0, ClipsDescendants = true}, LoadingGui)
+corner(LoadFrame, 12); outline(LoadFrame, 4, P.yellow)
 
-local trackGround = new("Frame", {Size = UDim2.new(1, 0, 0, 60), Position = UDim2.new(0, 0, 0.65, 0), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
-local trackLine = new("Frame", {Size = UDim2.new(1, 0, 0, 4), Position = UDim2.fromScale(0, 0), BackgroundColor3 = P.yellow, BorderSizePixel = 0}, trackGround)
+-- Céu (Gradiente)
+local skyGrad = new("UIGradient", {Color = ColorSequence.new(Color3.fromRGB(80, 160, 255), Color3.fromRGB(200, 230, 255))}, LoadFrame)
+skyGrad.Rotation = 90
 
-local loop = new("Frame", {Size = UDim2.fromOffset(120, 120), Position = UDim2.new(0.7, 0, 0.65, -120), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
-corner(loop, 60)
-local loopHole = new("Frame", {Size = UDim2.fromOffset(60, 60), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.bg, BorderSizePixel = 0}, loop)
-corner(loopHole, 30)
-local loopLine = new("Frame", {Size = UDim2.fromOffset(120, 4), Position = UDim2.fromScale(0, 0.5), AnchorPoint = Vector2.new(0, 0.5), BackgroundColor3 = P.yellow, BorderSizePixel = 0}, loop)
+-- Nuvens
+for i = 1, 4 do
+    local cloud = new("Frame", {Size = UDim2.fromOffset(60, 20), Position = UDim2.fromOffset(i * 120 - 40, 20 + math.random(10, 30)), BackgroundColor3 = P.white, BackgroundTransparency = 0.3, BorderSizePixel = 0}, LoadFrame)
+    corner(cloud, 10)
+    new("Frame", {Size = UDim2.fromOffset(40, 20), Position = UDim2.fromOffset(10, -10), BackgroundColor3 = P.white, BackgroundTransparency = 0.3, BorderSizePixel = 0}, cloud); corner(cloud:GetChildren()[1], 10)
+end
 
-local sonicRun = new("Frame", {Size = UDim2.fromOffset(30, 40), Position = UDim2.new(0, 50, 0.65, -40), BackgroundTransparency = 1}, LoadFrame)
-local sBody = new("Frame", {Size = UDim2.fromOffset(20, 24), Position = UDim2.fromOffset(5, 6), BackgroundColor3 = P.blue, BorderSizePixel = 0}, sonicRun); corner(sBody, 10)
-local sHead = new("Frame", {Size = UDim2.fromOffset(18, 18), Position = UDim2.fromOffset(12, 0), BackgroundColor3 = P.blue, BorderSizePixel = 0}, sonicRun); corner(sHead, 9)
-local sBelly = new("Frame", {Size = UDim2.fromOffset(12, 14), Position = UDim2.fromOffset(8, 12), BackgroundColor3 = Color3.fromRGB(255, 205, 160), BorderSizePixel = 0}, sonicRun); corner(sBelly, 6)
-local sShoe = new("Frame", {Size = UDim2.fromOffset(12, 8), Position = UDim2.fromOffset(2, 32), BackgroundColor3 = P.red, BorderSizePixel = 0}, sonicRun); corner(sShoe, 4)
-local sGlove = new("Frame", {Size = UDim2.fromOffset(8, 8), Position = UDim2.fromOffset(22, 14), BackgroundColor3 = P.white, BorderSizePixel = 0}, sonicRun); corner(sGlove, 4)
+-- Chão de Grama
+local grassTop = new("Frame", {Size = UDim2.new(1, 0, 0, 12), Position = UDim2.new(0, 0, 1, -80), BackgroundColor3 = Color3.fromRGB(90, 220, 80), BorderSizePixel = 0}, LoadFrame)
+local grassDirt = new("Frame", {Size = UDim2.new(1, 0, 0, 68), Position = UDim2.new(0, 0, 1, -68), BackgroundColor3 = Color3.fromRGB(160, 100, 60), BorderSizePixel = 0}, LoadFrame)
+for i = 1, 15 do
+    new("Frame", {Size = UDim2.fromOffset(10, 6), Position = UDim2.fromOffset(i * 35, -4), BackgroundColor3 = Color3.fromRGB(70, 190, 60), BorderSizePixel = 0, Rotation = -15}, grassTop)
+end
 
-local progress = 0
+-- Animais
+local runOffset = 0
 local isRunning = true
+local timeTracker = 0
+
+-- Função para desenhar o Sonic
+local sonicHolder = new("Frame", {Size = UDim2.fromOffset(60, 80), Position = UDim2.new(0.3, 0, 1, -140), BackgroundTransparency = 1}, LoadFrame)
+-- Rastro Azul
+local trail = new("Frame", {Size = UDim2.fromOffset(100, 30), Position = UDim2.fromOffset(-80, 30), BackgroundColor3 = P.blue, BackgroundTransparency = 0.5, BorderSizePixel = 0}, sonicHolder); corner(trail, 15)
+local trailGrad = new("UIGradient", {Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.5)})}, trail)
+-- Corpo
+local sBody = new("Frame", {Size = UDim2.fromOffset(26, 30), Position = UDim2.fromOffset(17, 30), BackgroundColor3 = P.blue, BorderSizePixel = 0}, sonicHolder); corner(sBody, 13)
+local sBelly = new("Frame", {Size = UDim2.fromOffset(16, 18), Position = UDim2.fromOffset(5, 12), BackgroundColor3 = Color3.fromRGB(255, 205, 160), BorderSizePixel = 0}, sBody); corner(sBelly, 8)
+-- Cabeça
+local sHead = new("Frame", {Size = UDim2.fromOffset(36, 34), Position = UDim2.fromOffset(12, 5), BackgroundColor3 = P.blue, BorderSizePixel = 0}, sonicHolder); corner(sHead, 17)
+-- Espinhos
+new("Frame", {Size = UDim2.fromOffset(20, 10), Position = UDim2.fromOffset(-15, 10), BackgroundColor3 = P.blue, BorderSizePixel = 0, Rotation = 20}, sHead); corner(sHead:GetChildren()[1], 5)
+new("Frame", {Size = UDim2.fromOffset(18, 10), Position = UDim2.fromOffset(-12, 20), BackgroundColor3 = P.blue, BorderSizePixel = 0, Rotation = -10}, sHead); corner(sHead:GetChildren()[2], 5)
+-- Olhos e Focinho
+local sEye = new("Frame", {Size = UDim2.fromOffset(10, 14), Position = UDim2.fromOffset(22, 8), BackgroundColor3 = P.white, BorderSizePixel = 0}, sHead); corner(sEye, 5)
+new("Frame", {Size = UDim2.fromOffset(4, 6), Position = UDim2.fromOffset(4, 4), BackgroundColor3 = P.ink, BorderSizePixel = 0}, sEye); corner(sEye:GetChildren()[1], 2)
+local sMuzzle = new("Frame", {Size = UDim2.fromOffset(18, 12), Position = UDim2.fromOffset(22, 18), BackgroundColor3 = Color3.fromRGB(255, 205, 160), BorderSizePixel = 0}, sHead); corner(sMuzzle, 6)
+new("Frame", {Size = UDim2.fromOffset(6, 4), Position = UDim2.fromOffset(10, 2), BackgroundColor3 = P.ink, BorderSizePixel = 0}, sMuzzle); corner(sMuzzle:GetChildren()[1], 2)
+-- Braço e Luva
+new("Frame", {Size = UDim2.fromOffset(8, 16), Position = UDim2.fromOffset(12, 45), BackgroundColor3 = Color3.fromRGB(255, 205, 160), BorderSizePixel = 0}, sonicHolder); corner(sonicHolder:GetChildren()[6], 4)
+local sGlove = new("Frame", {Size = UDim2.fromOffset(12, 12), Position = UDim2.fromOffset(8, 55), BackgroundColor3 = P.white, BorderSizePixel = 0}, sonicHolder); corner(sGlove, 6)
+-- Pernas e Sapatos
+local sLeg1 = new("Frame", {Size = UDim2.fromOffset(8, 18), Position = UDim2.fromOffset(22, 58), BackgroundColor3 = P.blue, BorderSizePixel = 0}, sonicHolder); corner(sLeg1, 4)
+local sShoe1 = new("Frame", {Size = UDim2.fromOffset(18, 10), Position = UDim2.fromOffset(16, 74), BackgroundColor3 = P.red, BorderSizePixel = 0}, sonicHolder); corner(sShoe1, 5)
+new("Frame", {Size = UDim2.fromOffset(18, 3), Position = UDim2.fromOffset(0, 3), BackgroundColor3 = P.white, BorderSizePixel = 0}, sShoe1)
+local sLeg2 = new("Frame", {Size = UDim2.fromOffset(8, 18), Position = UDim2.fromOffset(34, 58), BackgroundColor3 = P.blue, BorderSizePixel = 0}, sonicHolder); corner(sLeg2, 4)
+local sShoe2 = new("Frame", {Size = UDim2.fromOffset(18, 10), Position = UDim2.fromOffset(30, 74), BackgroundColor3 = P.red, BorderSizePixel = 0}, sonicHolder); corner(sShoe2, 5)
+new("Frame", {Size = UDim2.fromOffset(18, 3), Position = UDim2.fromOffset(0, 3), BackgroundColor3 = P.white, BorderSizePixel = 0}, sShoe2)
+
+
+-- Função para desenhar o Tails
+local tailsHolder = new("Frame", {Size = UDim2.fromOffset(50, 70), Position = UDim2.new(0.5, 0, 1, -180), BackgroundTransparency = 1}, LoadFrame)
+-- Rabos (Girando)
+local tailBase = new("Frame", {Size = UDim2.fromOffset(20, 20), Position = UDim2.fromOffset(0, 30), BackgroundTransparency = 1}, tailsHolder)
+local t1 = new("Frame", {Size = UDim2.fromOffset(24, 12), Position = UDim2.fromOffset(-18, 4), BackgroundColor3 = Color3.fromRGB(255, 140, 0), BorderSizePixel = 0, Rotation = 30}, tailBase); corner(t1, 6)
+new("Frame", {Size = UDim2.fromOffset(10, 8), Position = UDim2.fromOffset(14, 2), BackgroundColor3 = P.white, BorderSizePixel = 0}, t1); corner(t1:GetChildren()[1], 4)
+local t2 = new("Frame", {Size = UDim2.fromOffset(24, 12), Position = UDim2.fromOffset(-18, 4), BackgroundColor3 = Color3.fromRGB(255, 140, 0), BorderSizePixel = 0, Rotation = -30}, tailBase); corner(t2, 6)
+new("Frame", {Size = UDim2.fromOffset(10, 8), Position = UDim2.fromOffset(14, 2), BackgroundColor3 = P.white, BorderSizePixel = 0}, t2); corner(t2:GetChildren()[1], 4)
+-- Corpo
+local tBody = new("Frame", {Size = UDim2.fromOffset(22, 26), Position = UDim2.fromOffset(18, 28), BackgroundColor3 = Color3.fromRGB(255, 140, 0), BorderSizePixel = 0}, tailsHolder); corner(tBody, 11)
+new("Frame", {Size = UDim2.fromOffset(14, 16), Position = UDim2.fromOffset(4, 8), BackgroundColor3 = P.white, BorderSizePixel = 0}, tBody); corner(tBody:GetChildren()[1], 7)
+-- Cabeça
+local tHead = new("Frame", {Size = UDim2.fromOffset(32, 30), Position = UDim2.fromOffset(12, 5), BackgroundColor3 = Color3.fromRGB(255, 140, 0), BorderSizePixel = 0}, tailsHolder); corner(tHead, 15)
+new("Frame", {Size = UDim2.fromOffset(14, 10), Position = UDim2.fromOffset(-10, 0), BackgroundColor3 = Color3.fromRGB(255, 140, 0), BorderSizePixel = 0, Rotation = -30}, tHead); corner(tHead:GetChildren()[1], 5)
+new("Frame", {Size = UDim2.fromOffset(12, 10), Position = UDim2.fromOffset(-8, 14), BackgroundColor3 = Color3.fromRGB(255, 140, 0), BorderSizePixel = 0, Rotation = 30}, tHead); corner(tHead:GetChildren()[2], 5)
+local tEye = new("Frame", {Size = UDim2.fromOffset(8, 12), Position = UDim2.fromOffset(16, 8), BackgroundColor3 = P.white, BorderSizePixel = 0}, tHead); corner(tEye, 4)
+new("Frame", {Size = UDim2.fromOffset(4, 5), Position = UDim2.fromOffset(3, 3), BackgroundColor3 = P.ink, BorderSizePixel = 0}, tEye); corner(tEye:GetChildren()[1], 2)
+local tMuzzle = new("Frame", {Size = UDim2.fromOffset(16, 10), Position = UDim2.fromOffset(16, 16), BackgroundColor3 = P.white, BorderSizePixel = 0}, tHead); corner(tMuzzle, 5)
+new("Frame", {Size = UDim2.fromOffset(4, 4), Position = UDim2.fromOffset(10, 2), BackgroundColor3 = P.ink, BorderSizePixel = 0}, tMuzzle); corner(tMuzzle:GetChildren()[1], 2)
+-- Luvas e Sapatos
+new("Frame", {Size = UDim2.fromOffset(10, 10), Position = UDim2.fromOffset(10, 38), BackgroundColor3 = P.white, BorderSizePixel = 0}, tailsHolder); corner(tailsHolder:GetChildren()[8], 5)
+new("Frame", {Size = UDim2.fromOffset(10, 10), Position = UDim2.fromOffset(38, 38), BackgroundColor3 = P.white, BorderSizePixel = 0}, tailsHolder); corner(tailsHolder:GetChildren()[9], 5)
+local tShoe = new("Frame", {Size = UDim2.fromOffset(14, 8), Position = UDim2.fromOffset(18, 62), BackgroundColor3 = P.red, BorderSizePixel = 0}, tailsHolder); corner(tShoe, 4)
+new("Frame", {Size = UDim2.fromOffset(14, 3), Position = UDim2.fromOffset(0, 2), BackgroundColor3 = P.white, BorderSizePixel = 0}, tShoe)
+
+
+-- Função para desenhar o Knuckles
+local knuxHolder = new("Frame", {Size = UDim2.fromOffset(60, 80), Position = UDim2.new(0.7, 0, 1, -140), BackgroundTransparency = 1}, LoadFrame)
+-- Espinhos (Dreads)
+new("Frame", {Size = UDim2.fromOffset(12, 30), Position = UDim2.fromOffset(8, 15), BackgroundColor3 = P.red, BorderSizePixel = 0, Rotation = 30}, knuxHolder); corner(knuxHolder:GetChildren()[1], 6)
+new("Frame", {Size = UDim2.fromOffset(12, 30), Position = UDim2.fromOffset(40, 15), BackgroundColor3 = P.red, BorderSizePixel = 0, Rotation = -30}, knuxHolder); corner(knuxHolder:GetChildren()[2], 6)
+-- Corpo
+local kBody = new("Frame", {Size = UDim2.fromOffset(28, 30), Position = UDim2.fromOffset(16, 30), BackgroundColor3 = P.red, BorderSizePixel = 0}, knuxHolder); corner(kBody, 14)
+new("Frame", {Size = UDim2.fromOffset(16, 16), Position = UDim2.fromOffset(6, 10), BackgroundColor3 = P.white, BorderSizePixel = 0}, kBody); corner(kBody:GetChildren()[1], 8)
+-- Cabeça
+local kHead = new("Frame", {Size = UDim2.fromOffset(34, 32), Position = UDim2.fromOffset(13, 5), BackgroundColor3 = P.red, BorderSizePixel = 0}, knuxHolder); corner(kHead, 16)
+local kEye = new("Frame", {Size = UDim2.fromOffset(10, 12), Position = UDim2.fromOffset(18, 8), BackgroundColor3 = P.white, BorderSizePixel = 0}, kHead); corner(kEye, 5)
+new("Frame", {Size = UDim2.fromOffset(4, 5), Position = UDim2.fromOffset(4, 3), BackgroundColor3 = P.ink, BorderSizePixel = 0}, kEye); corner(kEye:GetChildren()[1], 2)
+local kMuzzle = new("Frame", {Size = UDim2.fromOffset(16, 10), Position = UDim2.fromOffset(18, 16), BackgroundColor3 = Color3.fromRGB(255, 205, 160), BorderSizePixel = 0}, kHead); corner(kMuzzle, 5)
+new("Frame", {Size = UDim2.fromOffset(4, 4), Position = UDim2.fromOffset(10, 2), BackgroundColor3 = P.ink, BorderSizePixel = 0}, kMuzzle); corner(kMuzzle:GetChildren()[1], 2)
+-- Braços e Luvas (Espinhos nas mãos)
+new("Frame", {Size = UDim2.fromOffset(14, 14), Position = UDim2.fromOffset(0, 40), BackgroundColor3 = P.white, BorderSizePixel = 0}, knuxHolder); corner(knuxHolder:GetChildren()[8], 7)
+new("Frame", {Size = UDim2.fromOffset(14, 14), Position = UDim2.fromOffset(46, 40), BackgroundColor3 = P.white, BorderSizePixel = 0}, knuxHolder); corner(knuxHolder:GetChildren()[9], 7)
+-- Pernas e Sapatos
+new("Frame", {Size = UDim2.fromOffset(20, 10), Position = UDim2.fromOffset(12, 74), BackgroundColor3 = P.red, BorderSizePixel = 0}, knuxHolder); corner(knuxHolder:GetChildren()[10], 5)
+new("Frame", {Size = UDim2.fromOffset(20, 10), Position = UDim2.fromOffset(28, 74), BackgroundColor3 = P.red, BorderSizePixel = 0}, knuxHolder); corner(knuxHolder:GetChildren()[11], 5)
+new("Frame", {Size = UDim2.fromOffset(20, 4), Position = UDim2.fromOffset(0, 3), BackgroundColor3 = Color3.fromRGB(90, 200, 80), BorderSizePixel = 0}, knuxHolder:GetChildren()[10])
+new("Frame", {Size = UDim2.fromOffset(20, 4), Position = UDim2.fromOffset(0, 3), BackgroundColor3 = Color3.fromRGB(90, 200, 80), BorderSizePixel = 0}, knuxHolder:GetChildren()[11])
+
+
+-- Loop de animação da tela de load
+local progress = 0
 task.spawn(function()
-    local t = 0
     while isRunning do
-        t = t + 0.05
-        local bob = math.sin(t * 10) * 3
-        sonicRun.Position = UDim2.new(0, 50 + (progress * 2), 0.65, -40 + bob)
-        if math.floor(t) % 2 == 0 then sShoe.Position = UDim2.fromOffset(4, 30) else sShoe.Position = UDim2.fromOffset(0, 34) end
-        loopLine.Position = UDim2.fromOffset((t * 20) % 120, 0.5)
-        task.wait(0.03)
+        local dt = task.wait(0.03)
+        timeTracker = timeTracker + dt
+        
+        -- Move a grama para dar sensação de corrida
+        runOffset = (runOffset + dt * 200) % 40
+        grassTop.Position = UDim2.new(0, -runOffset, 1, -80)
+        grassDirt.Position = UDim2.new(0, -runOffset, 1, -68)
+        
+        -- Animação das pernas do Sonic
+        local sStep = math.sin(timeTracker * 15)
+        sLeg1.Rotation = sStep * 30
+        sShoe1.Rotation = sStep * 30
+        sLeg2.Rotation = -sStep * 30
+        sShoe2.Rotation = -sStep * 30
+        
+        -- Animação das pernas do Knuckles
+        local kStep = math.sin(timeTracker * 15 + math.pi) 
+        knuxHolder:GetChildren()[10].Rotation = kStep * 25
+        knuxHolder:GetChildren()[11].Rotation = -kStep * 25
+        
+        -- Animação do Tails (Girar rabos e flutuar)
+        tailBase.Rotation = tailBase.Rotation + dt * 600
+        tailsHolder.Position = UDim2.new(0.5, 0, 1, -180 + math.sin(timeTracker * 5) * 10)
+        
+        -- Rastro do Sonic
+        trail.Size = UDim2.fromOffset(100 + math.sin(timeTracker * 10) * 20, 30)
     end
 end)
 
-local barBg = new("Frame", {Size = UDim2.fromOffset(300, 14), Position = UDim2.new(0.5, 0, 0.85, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = P.track, BorderSizePixel = 0}, LoadFrame)
-corner(barBg, 7); outline(barBg, 2, P.yellow)
+-- Barra de Progresso
+local barBg = new("Frame", {Size = UDim2.fromOffset(350, 16), Position = UDim2.new(0.5, 0, 1, -30), AnchorPoint = Vector2.new(0.5, 1), BackgroundColor3 = P.panelDark, BorderSizePixel = 0}, LoadFrame)
+corner(barBg, 8); outline(barBg, 3, P.ink)
 local barFill = new("Frame", {Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = P.yellow, BorderSizePixel = 0}, barBg)
-corner(barFill, 7)
-local loadText = label(LoadFrame, {Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 0.9, 0), Text = "Carregando... 0%", TextSize = 14, TextXAlignment = Enum.TextXAlignment.Center, Font = Enum.Font.FredokaOne, TextColor3 = P.text})
+corner(barFill, 8)
+local loadText = label(barBg, {Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 0.5, -10), Text = "Carregando... 0%", TextSize = 14, TextXAlignment = Enum.TextXAlignment.Center, Font = Enum.Font.FredokaOne, TextColor3 = P.ink})
 
 task.spawn(function()
     while progress < 100 do
@@ -176,14 +255,17 @@ task.spawn(function()
     isRunning = false
     TweenService:Create(LoadFrame, TweenInfo.new(0.4), {BackgroundTransparency = 1, Size = UDim2.fromOffset(0, 0)}):Play()
     for _, v in ipairs(LoadFrame:GetDescendants()) do
-        pcall(function() TweenService:Create(v, TweenInfo.new(0.4), {BackgroundTransparency = 1, TextTransparency = 1}):Play() end)
+        pcall(function() 
+            if v:IsA("GuiObject") then TweenService:Create(v, TweenInfo.new(0.4), {BackgroundTransparency = 1}):Play() end
+            if v:IsA("TextLabel") then TweenService:Create(v, TweenInfo.new(0.4), {TextTransparency = 1}):Play() end
+        end)
     end
     task.wait(0.45)
     LoadingGui:Destroy()
 end)
 
 -- ============================================================
--- UI PRINCIPAL & TEMA SONIC (Padrão Xadrez)
+-- UI PRINCIPAL
 -- ============================================================
 local GUI = new("ScreenGui", {Name = "SonicHub", ResetOnSpawn = false, DisplayOrder = 10, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Enabled = false}, PlayerGui)
 local Overlay = new("ScreenGui", {Name = "SonicHubOverlay", ResetOnSpawn = false, DisplayOrder = 5, IgnoreGuiInset = true}, PlayerGui)
@@ -191,10 +273,9 @@ local Overlay = new("ScreenGui", {Name = "SonicHubOverlay", ResetOnSpawn = false
 local Main = new("Frame", {Name = "Main", Size = UDim2.fromOffset(Config.WinW, Config.WinH), Position = UDim2.new(0.5, -Config.WinW / 2, 0.5, -Config.WinH / 2), BackgroundColor3 = P.bg, BorderSizePixel = 0, ClipsDescendants = true}, GUI)
 corner(Main, 12); outline(Main, 3, P.text); local UIScale = new("UIScale", {Scale = 1}, Main)
 
--- TitleBar com xadrez Sonic
 local TitleBar = new("Frame", {Size = UDim2.new(1, 0, 0, Config.TitleH), BackgroundColor3 = P.title, BorderSizePixel = 0, ClipsDescendants = true}, Main)
 corner(TitleBar, 10)
-local checkered = new("Frame", {Size = UDim2.new(1, 0, 0, Config.TitleH), BackgroundTransparency = 0.8}, TitleBar)
+local checkered = new("Frame", {Size = UDim2.new(1, 0, 0, Config.TitleH), BackgroundTransparency = 0.85}, TitleBar)
 for i = 0, 20 do
     for j = 0, 3 do
         if (i + j) % 2 == 0 then
@@ -218,7 +299,6 @@ local Footer = new("Frame", {Size = UDim2.new(1, 0, 0, Config.FooterH), Position
 new("Frame", {Size = UDim2.new(1, 0, 0, 3), BackgroundColor3 = P.green, BorderSizePixel = 0}, Footer)
 local usableH = (Config.WinH - Config.TitleH) - Config.FooterH - 12
 
--- Sidebar maior
 local Sidebar = new("Frame", {Position = UDim2.fromOffset(6, 6), Size = UDim2.fromOffset(180, usableH), BackgroundColor3 = P.panel, BorderSizePixel = 0}, Body)
 corner(Sidebar, 10); outline(Sidebar, 2.5, P.text)
 local NavList = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, -10), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y}, Sidebar)
@@ -231,7 +311,7 @@ local Scroll = new("ScrollingFrame", {Position = UDim2.fromOffset(0, 56), Size =
 new("UIPadding", {PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 8), PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 10)}, Scroll)
 
 -- ============================================================
--- BUILDERS (Sliders e Toggles corrigidos)
+-- BUILDERS (UI Consertada)
 -- ============================================================
 local infoRows, currentCard = {}, nil
 local captureTarget = nil
@@ -245,7 +325,6 @@ local function textBlock(parent, item, scale)
     return blk
 end
 
--- Switch com animação e sincronização
 local function makeSwitch(parent, key, pos)
     local pill = new("TextButton", {Size = UDim2.fromOffset(46, 24), AnchorPoint = Vector2.new(1, 0.5), Position = pos, BackgroundColor3 = P.track, Text = "", AutoButtonColor = false}, parent)
     corner(pill, 12); outline(pill, 2, P.ink)
@@ -255,12 +334,12 @@ local function makeSwitch(parent, key, pos)
     local isOn = preferences[key] == true
     local function render()
         local newOn = preferences[key] == true
-        if isOn == newOn then return end -- Evita spam de tweens
+        if isOn == newOn then return end
         isOn = newOn
         tween(pill, {BackgroundColor3 = isOn and P.green or P.track})
         tween(knob, {Position = isOn and UDim2.fromOffset(26, 4) or UDim2.fromOffset(4, 4)})
     end
-    table.insert(dynamicElements, render) -- Salva para atualizar no RenderStepped
+    uiRenderers[key] = render
     
     pill.MouseButton1Click:Connect(function() 
         setPref(key, not (preferences[key] == true)); 
@@ -276,8 +355,7 @@ local function rowToggle(body, item)
     makeSwitch(row, item.key, UDim2.new(1, 0, 0.5, 0))
     
     if item.bindKey then
-        -- Botão de Keybind estilizado como uma tecla (Keycap)
-        local chip = new("TextButton", {Size = UDim2.fromOffset(60, 24), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -56, 0.5, 0), BackgroundColor3 = P.panelDark, Text = tostring(preferences[item.bindKey]):upper(), TextColor3 = P.yellow, Font = Enum.Font.GothamBlack, TextSize = 11, AutoButtonColor = false}, row)
+        local chip = new("TextButton", {Size = UDim2.fromOffset(80, 24), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -54, 0.5, 0), BackgroundColor3 = P.panelDark, Text = formatBind(preferences[item.bindKey]), TextColor3 = P.yellow, Font = Enum.Font.GothamBold, TextSize = 12, AutoButtonColor = false}, row)
         corner(chip, 6); outline(chip, 1.5, P.yellow)
         
         chip.MouseButton1Click:Connect(function() 
@@ -302,7 +380,7 @@ local function rowCheck(body, item)
         tween(box, {BackgroundColor3 = isOn and P.yellow or P.white})
         mark.Visible = isOn
     end
-    table.insert(dynamicElements, render)
+    uiRenderers[item.key] = render
     
     box.MouseButton1Click:Connect(function() setPref(item.key, not (preferences[item.key] == true)); render() end)
     render()
@@ -328,7 +406,6 @@ local function rowDropdown(body, item)
     box.MouseButton1Click:Connect(function() list.Visible = not list.Visible end); render()
 end
 
--- SLIDER TOTALMENTE CORRIGIDO
 local function rowSlider(body, item)
     local row = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1}, body)
     new("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder}, row)
@@ -352,11 +429,7 @@ local function rowSlider(body, item)
     
     holder.InputBegan:Connect(function(input) 
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
-            -- Define o slider ativo globalmente com todas as referências para o loop principal
-            activeSlider = {
-                key = item.key, item = item, track = track, render = render
-            }
-            -- Atualiza imediatamente onde clicou
+            activeSlider = { key = item.key, item = item, track = track, render = render }
             local w = track.AbsoluteSize.X
             if w > 0 then
                 local a = math.clamp((input.Position.X - track.AbsolutePosition.X) / w, 0, 1)
@@ -376,7 +449,6 @@ local function rowInfo(body, item)
     table.insert(infoRows, {label = value, get = item.get})
 end
 
--- Config System (Simplificado para a UI não bugar)
 local configFolder = "SonicHubConfigs"
 if type(makefolder) == "function" and type(isfolder) == "function" then
     if not isfolder(configFolder) then makefolder(configFolder) end
@@ -587,12 +659,17 @@ local navSprites = {
     ["Trigger & Rage"] = "ring", ["Gun Mods"] = "knuckles", ["Visuals"] = "tails", ["Settings"] = "ring",
 }
 
+local bindToToggle = {}
+
 for _, page in pairs(pages) do
     for _, side in ipairs({"left", "right"}) do
         for _, card in ipairs(page[side]) do
             for _, item in ipairs(card.rows) do
                 if item.key and preferences[item.key] == nil then preferences[item.key] = item.value end
-                if item.bindKey and preferences[item.bindKey] == nil then preferences[item.bindKey] = item.bindValue end
+                if item.bindKey then
+                    if preferences[item.bindKey] == nil then preferences[item.bindKey] = item.bindValue end
+                    bindToToggle[item.bindKey] = item.key
+                end
             end
         end
     end
@@ -649,14 +726,11 @@ do
         new("UIPadding", {PaddingTop = UDim.new(0, 6), PaddingLeft = UDim.new(0, 6)}, sec)
         for _, name in ipairs(group.items) do
             order += 1
-            -- Botões da aba maiores
             local btn = new("TextButton", {Size = UDim2.new(1, 0, 0, 36), BackgroundColor3 = P.panel, Text = "          " .. name, TextColor3 = P.text, Font = Enum.Font.GothamBold, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false, LayoutOrder = order}, NavList)
             corner(btn, 8)
-            
-            -- Ícones maiores
-            local icon = createSprite(btn, navSprites[name] or "ring", 20)
-            icon.Position = UDim2.fromOffset(8, 8)
-            
+            -- Ícone da sidebar recriado em forma de bloco
+            local icon = new("Frame", {Size = UDim2.fromOffset(14, 14), Position = UDim2.fromOffset(10, 11), BackgroundColor3 = P.blue, BorderSizePixel = 0}, btn)
+            corner(icon, 4)
             navButtons[name] = {btn = btn, icon = icon}
             btn.MouseButton1Click:Connect(function() showPage(name) end)
         end
@@ -703,7 +777,6 @@ local function isVisible(camPos, part, model)
     rayParams.FilterDescendantsInstances = ignore; return Workspace:Raycast(camPos, part.Position - camPos, rayParams) == nil
 end
 
--- Função de mira corrigida (suporta centro da tela para Triggerbot)
 local function evaluate(cam, camPos, mouse, model, o)
     local npc = readNpc(model); if not npc then return nil end
     local part = resolvePart(npc, o.names); local pos = part.Position
@@ -733,6 +806,7 @@ connect(UserInputService.WindowFocusReleased, function() windowFocused = false; 
 
 connect(UserInputService.InputBegan, function(input, processed)
     if processed then return end
+    
     if captureTarget then
         local keyName = nil
         if input.UserInputType == Enum.UserInputType.Keyboard then
@@ -743,15 +817,35 @@ connect(UserInputService.InputBegan, function(input, processed)
         end
         if keyName then
             setPref(captureTarget.key, keyName)
-            captureTarget.button.Text = keyName:upper()
+            captureTarget.button.Text = formatBind(keyName)
             captureTarget = nil
         end
         return
     end
+    
+    for bindKey, toggleKey in pairs(bindToToggle) do
+        local val = pref(bindKey)
+        if val and val ~= "None" then
+            local matches = false
+            if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == val then matches = true
+            elseif input.UserInputType == Enum.UserInputType.MouseButton1 and val == "MouseButton1" then matches = true
+            elseif input.UserInputType == Enum.UserInputType.MouseButton2 and val == "MouseButton2" then matches = true
+            elseif input.UserInputType == Enum.UserInputType.MouseButton3 and val == "MouseButton3" then matches = true
+            end
+
+            if matches then
+                local modeKey = bindKey:gsub("%.bind$", ".mode")
+                if pref(modeKey, "Hold") == "Toggle" then
+                    setPref(toggleKey, not pref(toggleKey))
+                    if uiRenderers[toggleKey] then uiRenderers[toggleKey]() end
+                end
+            end
+        end
+    end
+
     if input.KeyCode == Config.MenuKey then GUI.Enabled = not GUI.Enabled end
 end)
 
--- Slider global fix (arrasta apenas se activeSlider estiver definido)
 connect(UserInputService.InputChanged, function(input)
     if activeSlider then
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
@@ -774,27 +868,25 @@ end)
 
 local function keyActive(id, bindName, modeName)
     if modeName == "Always" then return windowFocused and not UserInputService:GetFocusedTextBox() end
-    local s = KeyState[id] or {down = false, on = false}; KeyState[id] = s
+    if modeName == "Toggle" then return pref(id .. ".enabled", false) end
+    
+    if not pref(id .. ".enabled", false) then return false end
     local bindType, bindVal = nil, nil
     if bindName and bindName ~= "None" then
         if bindName:find("MouseButton") then bindType = "mouse"; bindVal = Enum.UserInputType[bindName]
         else local ok, kc = pcall(function() return Enum.KeyCode[bindName] end); if ok and kc then bindType = "key"; bindVal = kc end end
     end
-    if not bindType or not windowFocused or UserInputService:GetFocusedTextBox() then s.down = false; s.on = false; return false end
+    if not bindType or not windowFocused or UserInputService:GetFocusedTextBox() then return false end
     local down = false
     if bindType == "mouse" then down = UserInputService:IsMouseButtonPressed(bindVal)
     else down = UserInputService:IsKeyDown(bindVal) end
-    local result
-    if modeName == "Toggle" then if down and not s.down then s.on = not s.on end; result = s.on
-    else s.on = false; result = down end
-    s.down = down
-    return result
+    return down
 end
 
 -- Aimbot
 local aimSticky = nil
 local function aimbotStep(dt)
-    local aiming = pref("aim.enabled", false) and keyActive("aim", pref("aim.bind", "MouseButton2"), pref("aim.mode", "Hold"))
+    local aiming = keyActive("aim", pref("aim.bind", "MouseButton2"), pref("aim.mode", "Hold"))
     local cam = Workspace.CurrentCamera
     if not cam then return end
     if aiming then
@@ -832,20 +924,21 @@ local function silentAim()
     return target
 end
 
--- TRIGGERBOT REAL (Atira se o centro da tela estiver no inimigo)
+-- TRIGGERBOT / RAGEBOT
 local lastTriggerTime = 0
 local function triggerStep()
     local isRage = pref("rage.enabled", false)
     local isTrg = pref("trg.enabled", false)
     if not isRage and not isTrg then return end
     
+    local id = isRage and "rage" or "trg"
     local mode = isRage and "Always" or pref("trg.mode", "Always")
     local bind = isRage and "None" or pref("trg.bind", "MouseButton2")
-    if not keyActive("trg", bind, mode) then return end
+    
+    if not keyActive(id, bind, mode) then return end
     
     local cam = Workspace.CurrentCamera; if not cam then return end
     
-    -- Usa a FOV pequena (15px) e baseia no CENTRO da tela (crosshair)
     local target = pickTarget(cam, {
         names = {"Head", "UpperTorso", "Torso"}, 
         fov = prefNum("trg.fov", 15), 
@@ -865,7 +958,7 @@ local function triggerStep()
 end
 
 -- ============================================================
--- ESP TOTAL DO ZERO (Blindado)
+-- ESP TOTAL DO ZERO
 -- ============================================================
 local entries = {}
 local function placeLine(f, p1, p2, thickness, color)
@@ -1076,11 +1169,6 @@ local function guarded(tag, fn, ...)
     if not ok and not reported[tag] then reported[tag] = true; warn("[Sonic Hub] " .. tag .. " error: " .. tostring(err)) end
 end
 
--- Loop de atualização visual (Para animar Toggles com teclas)
-RunService.RenderStepped:Connect(function()
-    for _, update in ipairs(dynamicElements) do update() end
-end)
-
 RunService:BindToRenderStep("AFG_Main", Enum.RenderPriority.Camera.Value + 1, function(dt)
     if not GUI.Parent then cleanup(); return end
     fps = fps * 0.9 + (1 / math.max(dt, 1e-4)) * 0.1
@@ -1093,4 +1181,4 @@ end)
 GUI.Enabled = true
 task.wait(0.4)
 showPage("Main")
-print("[Sonic Hub] V16 Carregado. Sliders e Triggers consertados.")
+print("[Sonic Hub] V18 Carregado. Tela de load animada e UI consertada.")
