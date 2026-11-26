@@ -1,4 +1,4 @@
--- Drx Hub V16 (todas as opções funcionais + opções do vídeo luau.pro) - interface original preservada
+-- Drx Hub V17 [V16 + correcoes: silent/wallcheck/trigger/camera/bhop + sonda] (todas as opções funcionais + opções do vídeo luau.pro) - interface original preservada
 -- Fontes: [fornecido] drx8.lua + vídeo | [derivado] opções lidas dos frames do vídeo | [assumido] ver comentários "Assumido"
 -- Dados dependentes de jogo ficam em GameConfig (nil = desconhecido). Nada foi compilado/testado no Roblox aqui.
 local Players = game:GetService("Players")
@@ -423,6 +423,7 @@ local Cap = {
 -- Dados dependentes de jogo/build. nil = DESCONHECIDO (a função fica bloqueada e avisa no console).
 local GameConfig = {
     Build = "UNSET (nenhum dump do jogo foi fornecido)",
+    Probe = true, -- imprime no console quais metodos de tiro o jogo usa; ponha false depois
     Weapon = {
         -- function(tool) -> ModuleScript|nil  : localiza o módulo de configuração da arma equipada
         ToolModule = nil,
@@ -550,9 +551,15 @@ local function setFilter(extra)
     if extra then f[#f + 1] = extra end
     RayP.FilterDescendantsInstances = f
 end
+local WallP = RaycastParams.new()
+WallP.FilterType = Enum.RaycastFilterType.Exclude
+WallP.RespectCanCollide = true
 local function lineClear(cam, pos, char)
-    setFilter(char)
-    return Workspace:Raycast(cam.CFrame.Position, pos - cam.CFrame.Position, RayP) == nil
+    local f = {}
+    if LP.Character then f[#f + 1] = LP.Character end
+    if char then f[#f + 1] = char end
+    WallP.FilterDescendantsInstances = f
+    return Workspace:Raycast(cam.CFrame.Position, pos - cam.CFrame.Position, WallP) == nil
 end
 local function getPart(char, which)
     if which == "Head" then return char:FindFirstChild("Head")
@@ -671,21 +678,31 @@ local Silent = {target = nil, hooked = false, alive = true}
 do
     if Cap.hookmetamethod and Cap.getnamecallmethod and Cap.checkcaller then
         local oldNC
+        -- Sem chamadas com ":" aqui dentro: elas sobrescrevem o metodo de namecall que oldNC le.
         local function hooked(self, ...)
             local method = Cap.getnamecallmethod()
             local st = Silent.target
             if Silent.alive and st and self == Workspace and not Cap.checkcaller() then
                 local n = select("#", ...)
-                if method == "Raycast" then
-                    local a = {...}
-                    if typeof(a[1]) == "Vector3" and typeof(a[2]) == "Vector3" then
-                        a[2] = (st.pos - a[1]).Unit * a[2].Magnitude
+                local a = {...}
+                if method == "Raycast" and typeof(a[1]) == "Vector3" and typeof(a[2]) == "Vector3" then
+                    local to = st.pos - a[1]
+                    if to.Magnitude > 0.01 then
+                        a[2] = to.Unit * math.max(a[2].Magnitude, to.Magnitude + 1)
+                        if not get("sil_vis", false) then
+                            local rp = RaycastParams.new()
+                            rp.FilterType = Enum.RaycastFilterType.Include
+                            rp.FilterDescendantsInstances = {st.char}
+                            a[3] = rp
+                            n = math.max(n, 3)
+                        end
                         return oldNC(self, table.unpack(a, 1, n))
                     end
-                elseif method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay" or method == "FindPartOnRayWithWhitelist" then
-                    local a = {...}
-                    if typeof(a[1]) == "Ray" then
-                        a[1] = Ray.new(a[1].Origin, (st.pos - a[1].Origin).Unit * a[1].Direction.Magnitude)
+                elseif (method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist")
+                    and typeof(a[1]) == "Ray" then
+                    local to = st.pos - a[1].Origin
+                    if to.Magnitude > 0.01 then
+                        a[1] = Ray.new(a[1].Origin, to.Unit * math.max(a[1].Direction.Magnitude, to.Magnitude + 1))
                         return oldNC(self, table.unpack(a, 1, n))
                     end
                 end
@@ -695,6 +712,24 @@ do
         local ok = pcall(function() oldNC = Cap.hookmetamethod(game, "__namecall", Cap.newcclosure and Cap.newcclosure(hooked) or hooked) end)
         Silent.hooked = ok and oldNC ~= nil
     end
+end
+
+-- Sonda de diagnostico (GameConfig.Probe): imprime uma vez cada chamada de hit-detection feita pelo jogo.
+-- Nao cobre Mouse.Hit/Mouse.Target (__index). Ponha GameConfig.Probe = false depois de ler o console.
+if GameConfig.Probe and Cap.hookmetamethod and Cap.getnamecallmethod and Cap.checkcaller then
+    local seen, oldP = {}, nil
+    local function probeHook(self, ...)
+        local m = Cap.getnamecallmethod()
+        if Silent.alive and not Cap.checkcaller() and (m == "Raycast" or string.find(m, "^FindPartOnRay") or m == "FireServer"
+            or m == "InvokeServer" or m == "ViewportPointToRay" or m == "ScreenPointToRay") then
+            local types = {}
+            for i, v in ipairs({...}) do types[i] = typeof(v) end
+            local line = m .. " em " .. tostring(self) .. " (" .. table.concat(types, ",") .. ")"
+            if not seen[line] then seen[line] = true; print("[Drx probe] " .. line) end
+        end
+        return oldP(self, ...)
+    end
+    pcall(function() oldP = Cap.hookmetamethod(game, "__namecall", Cap.newcclosure and Cap.newcclosure(probeHook) or probeHook) end)
 end
 local function runSilent(cam, dt)
     Silent.target = nil
@@ -761,6 +796,15 @@ local function zoneOK(part, zone)
     if zone == "Head" then return n == "Head" end
     return not (n:find("Leg") or n:find("Foot") or n == "LowerTorso")
 end
+local function entityFromPart(part)
+    local m = part
+    while m and m ~= Workspace do
+        local e = EntCache.byChar[m]
+        if e then return e end
+        m = m.Parent
+    end
+    return nil
+end
 local function runTrigger(cam, dt)
     if not (get("trg_on") and bindActive("trg_key")) then Trig.since = nil; return end
     entities()
@@ -785,8 +829,7 @@ local function runTrigger(cam, dt)
         setFilter(nil)
         local res = Workspace:Raycast(ray.Origin, ray.Direction * maxD, RayP)
         if res then
-            local model = res.Instance:FindFirstAncestorOfClass("Model")
-            local e = model and EntCache.byChar[model]
+            local e = entityFromPart(res.Instance)
             if e and not e.npc and ((not teamOn) or e.enemy) and zoneOK(res.Instance, zone) then hitDist = res.Distance end
         end
     end
@@ -1343,6 +1386,7 @@ local function onHeartbeat(dt)
             if get("misc_bhop") and (not typing) and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
                 if hum.FloorMaterial ~= Enum.Material.Air and os.clock() - HB.lastHop > 0.15 then
                     HB.lastHop = os.clock()
+                    hum.Jump = true
                     hum:ChangeState(Enum.HumanoidStateType.Jumping)
                     HB.boost = math.min(HB.boost + getNum("bh_inc", 2), math.max(getNum("bh_max", 32) - hum.WalkSpeed, 0))
                 end
@@ -1409,7 +1453,8 @@ local gRapid = guard("rapid", function()
     if get("trc_on") and now - bulletLast > 0.1 then bulletLast = now; spawnBulletTracer() end
 end)
 
-Conns[#Conns + 1] = RunService.RenderStepped:Connect(function(dt)
+pcall(function() RunService:UnbindFromRenderStep("DrxMain") end)
+RunService:BindToRenderStep("DrxMain", Enum.RenderPriority.Camera.Value + 1, function(dt)
     FrameNo = FrameNo + 1
     fpsAvg = fpsAvg + (1 / math.max(dt, 1e-4) - fpsAvg) * 0.05
     gPoll()
@@ -1474,6 +1519,7 @@ local function cleanup()
     if cleaned then return end; cleaned = true
     if shared.DrxCleanup == cleanup then shared.DrxCleanup = nil end
     Silent.alive = false; Silent.target = nil
+    pcall(function() RunService:UnbindFromRenderStep("DrxMain") end)
     for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end
     stopFly(); restoreWeapon()
     for k, e in pairs(ESP) do destroyESP(e); ESP[k] = nil end
@@ -1484,5 +1530,5 @@ shared.DrxCleanup = cleanup
 GUI.Destroying:Connect(cleanup)
 
 Booted = true
-print(string.format("[Drx Hub V16] pronto | silent-hook=%s mousemoverel=%s mouse1click=%s | GameConfig.Build=%s",
+print(string.format("[Drx Hub V17] pronto | silent-hook=%s mousemoverel=%s mouse1click=%s | GameConfig.Build=%s",
     tostring(Silent.hooked), tostring(type(Cap.mousemoverel) == "function"), tostring(type(Cap.mouse1click) == "function"), GameConfig.Build))
