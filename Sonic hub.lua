@@ -1,4 +1,4 @@
--- Sonic Hub V31 (Correção Total de Cores, ESP, Aimbot e Silent)
+-- Sonic Hub V32 (Reforma Total: Tudo Funcional)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -10,6 +10,7 @@ local VirtualUser = game:GetService("VirtualUser")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local Camera = Workspace.CurrentCamera
 
 if shared.SonicHubCleanup then pcall(shared.SonicHubCleanup) end
 for _, name in ipairs({"SonicHub", "SonicHubOverlay"}) do
@@ -22,18 +23,20 @@ local function set(k, v) Prefs[k] = v end
 local function get(k, d) local v = Prefs[k]; if v == nil then return d end; return v end
 local function getNum(k, d) local v = tonumber(get(k, d)); if not v or v ~= v then return d end; return v end
 
--- SISTEMA DE CORES
+-- ============================================================
+-- SISTEMA DE CORES (THEME)
+-- ============================================================
 local Theme = {
-    bg = Color3.fromRGB(255, 255, 255),
-    panel = Color3.fromRGB(240, 240, 245),
-    text = Color3.fromRGB(20, 20, 25),
-    sub = Color3.fromRGB(100, 100, 110),
-    accent = Color3.fromRGB(220, 50, 50),
-    stroke = Color3.fromRGB(200, 200, 210),
-    track = Color3.fromRGB(220, 220, 230),
+    bg = Color3.fromRGB(15, 15, 20),
+    panel = Color3.fromRGB(25, 25, 35),
+    text = Color3.fromRGB(255, 255, 255),
+    sub = Color3.fromRGB(150, 150, 160),
+    accent = Color3.fromRGB(180, 255, 0),
+    stroke = Color3.fromRGB(50, 50, 65),
+    track = Color3.fromRGB(40, 40, 50),
 }
 
-local ThemeElements = {} -- Armazena elementos para atualizar cores sem recriar a UI
+local ThemeElements = {}
 local function regTheme(inst, type)
     table.insert(ThemeElements, {inst = inst, type = type})
 end
@@ -92,7 +95,7 @@ local TitleBar = new("Frame", {Size = UDim2.new(1, 0, 0, 60), BackgroundColor3 =
 corner(TitleBar, 12)
 new("Frame", {Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 1, -20), BackgroundColor3 = Theme.panel}, TitleBar, "panel")
 new("Frame", {Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = Theme.accent}, TitleBar, "accent")
-label(TitleBar, {Size = UDim2.fromOffset(300, 60), Position = UDim2.fromOffset(20, 0), Text = "MARIO HUB V31", Font = Enum.Font.GothamBlack, TextSize = 26}, "text")
+label(TitleBar, {Size = UDim2.fromOffset(300, 60), Position = UDim2.fromOffset(20, 0), Text = "SONIC HUB V32", Font = Enum.Font.GothamBlack, TextSize = 26}, "text")
 
 local closeBtn = new("TextButton", {Size = UDim2.fromOffset(36, 36), Position = UDim2.new(1, -46, 0.5, -18), BackgroundColor3 = Theme.accent, Text = "X", Font = Enum.Font.GothamBlack, TextSize = 18, TextColor3 = Color3.new(1,1,1), AutoButtonColor = false}, TitleBar, "accent")
 corner(closeBtn, 8)
@@ -151,7 +154,7 @@ local function CreateSlider(parent, name, key, min, max, default)
     local valLbl = label(row, {Size = UDim2.new(0.3, 0, 0, 20), Position = UDim2.new(0.7, 0, 0, 0), Text = tostring(get(key)), TextXAlignment = Enum.TextXAlignment.Right}, "accent")
     local btn = new("TextButton", {Size = UDim2.new(1, 0, 0, 30), Position = UDim2.fromOffset(0, 22), BackgroundTransparency = 1, Text = ""}, row)
     local track = new("Frame", {Size = UDim2.new(1, 0, 0, 6), Position = UDim2.fromOffset(0, 12), BackgroundColor3 = Theme.track}, btn, "track"); corner(track, 3)
-    local fill = new("Frame", {Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Theme.accent}, track); corner(fill, 3)
+    local fill = new("Frame", {Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Theme.accent}, track, "accent"); corner(fill, 3)
     local knob = new("Frame", {Size = UDim2.fromOffset(16, 16), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = Color3.new(1,1,1)}, track); corner(knob, 8); outline(knob, 1, Theme.stroke, "stroke")
     
     local function update(pct)
@@ -198,43 +201,52 @@ local function CreateDropdown(parent, name, key, options, default)
 end
 
 local function CreateKeybind(parent, name, key, defaultKey, defaultMode)
-    Prefs[key] = Prefs[key] or {Key = defaultKey, Mode = defaultMode}
+    if not Prefs[key] or type(Prefs[key]) ~= "table" then Prefs[key] = {Key = defaultKey, Mode = defaultMode} end
     local row = new("Frame", {Size = UDim2.new(1, 0, 0, 60), BackgroundTransparency = 1}, parent)
     label(row, {Size = UDim2.new(1, 0, 0, 20), Text = name}, "text")
     local container = new("Frame", {Size = UDim2.new(1, 0, 0, 30), Position = UDim2.fromOffset(0, 22), BackgroundColor3 = Theme.bg}, row, "bg"); corner(container, 6); outline(container, 1.5, Theme.stroke, "stroke")
     
-    local btnKey = new("TextButton", {Size = UDim2.new(0.5, -2, 1, 0), BackgroundTransparency = 1, Text = tostring(get(key).Key), TextSize = 15, Font = Enum.Font.GothamBold}, container, "text")
-    local btnMode = new("TextButton", {Size = UDim2.new(0.5, -2, 1, 0), Position = UDim2.new(0.5, 2, 0, 0), BackgroundColor3 = Theme.track, Text = tostring(get(key).Mode), TextSize = 15, Font = Enum.Font.GothamBold}, container, "accent"); corner(btnMode, 6)
+    local btnKey = new("TextButton", {Size = UDim2.new(0.5, -2, 1, 0), BackgroundTransparency = 1, Text = tostring(Prefs[key].Key), TextSize = 15, Font = Enum.Font.GothamBold}, container, "text")
+    local btnMode = new("TextButton", {Size = UDim2.new(0.5, -2, 1, 0), Position = UDim2.new(0.5, 2, 0, 0), BackgroundColor3 = Theme.track, Text = tostring(Prefs[key].Mode), TextSize = 15, Font = Enum.Font.GothamBold}, container, "accent"); corner(btnMode, 6)
     
     btnMode.MouseButton1Click:Connect(function()
         local modes = {"Always", "Hold", "Toggle"}
-        local curr = get(key).Mode; local nextMode = modes[1]
+        local curr = Prefs[key].Mode; local nextMode = modes[1]
         for i, m in ipairs(modes) do if m == curr then nextMode = modes[(i % #modes) + 1] break end end
-        set(key, {Key = get(key).Key, Mode = nextMode}); btnMode.Text = nextMode
+        Prefs[key].Mode = nextMode; btnMode.Text = nextMode
     end)
     
     btnKey.MouseButton1Click:Connect(function()
-        btnKey.Text = "Aperte..."
+        btnKey.Text = "..."
         local conn
         conn = UserInputService.InputBegan:Connect(function(input, processed)
             if processed then return end
-            if input.UserInputType == Enum.UserInputType.Keyboard or input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
-                local keyName = input.KeyCode.Name
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then keyName = "LMB" end
-                if input.UserInputType == Enum.UserInputType.MouseButton2 then keyName = "RMB" end
-                set(key, {Key = keyName, Mode = get(key).Mode}); btnKey.Text = keyName; conn:Disconnect()
+            local kName = nil
+            if input.UserInputType == Enum.UserInputType.Keyboard then kName = input.KeyCode.Name
+            elseif input.UserInputType == Enum.UserInputType.MouseButton1 then kName = "LMB"
+            elseif input.UserInputType == Enum.UserInputType.MouseButton2 then kName = "RMB"
+            elseif input.UserInputType == Enum.UserInputType.MouseButton3 then kName = "MMB" end
+            
+            if kName then
+                Prefs[key].Key = kName; btnKey.Text = kName; conn:Disconnect()
             end
         end)
     end)
 end
 
+-- ============================================================
+-- PÁGINAS
+-- ============================================================
 local Pages, NavButtons = {}, {}
 local function AddPage(name, sub, buildFunc)
     local page = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 4, Visible = false, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(0,0,0,0)}, PageContainer)
     new("UIListLayout", {Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder}, page)
     new("UIPadding", {PaddingRight = UDim.new(0, 12), PaddingBottom = UDim.new(0, 20)}, page)
-    label(page, {Size = UDim2.new(1, 0, 0, 34), Text = name, Font = Enum.Font.GothamBlack, TextSize = 28, LayoutOrder = -2}, "text")
-    label(page, {Size = UDim2.new(1, 0, 0, 20), Text = sub, TextSize = 14, LayoutOrder = -1, Font = Enum.Font.Gotham}, "sub")
+    
+    local title = label(page, {Size = UDim2.new(1, 0, 0, 34), Text = name, Font = Enum.Font.GothamBlack, TextSize = 28, LayoutOrder = -2}, "text")
+    local subtitle = label(page, {Size = UDim2.new(1, 0, 0, 20), Text = sub, TextSize = 14, LayoutOrder = -1, Font = Enum.Font.Gotham}, "sub")
+    title.LayoutOrder = -2; subtitle.LayoutOrder = -1
+    
     Pages[name] = page
     buildFunc(page)
 end
@@ -260,23 +272,22 @@ end
 
 AddPage("Settings", "Mude as cores e o visual", function(p)
     local g1 = CreateGroup(p, "Cores do Painel")
-    CreateSlider(g1, "Fundo (R)", "color_bg_r", 0, 255, 255)
-    CreateSlider(g1, "Fundo (G)", "color_bg_g", 0, 255, 255)
-    CreateSlider(g1, "Fundo (B)", "color_bg_b", 0, 255, 255)
+    CreateSlider(g1, "Fundo (R)", "color_bg_r", 0, 255, 15)
+    CreateSlider(g1, "Fundo (G)", "color_bg_g", 0, 255, 15)
+    CreateSlider(g1, "Fundo (B)", "color_bg_b", 0, 255, 20)
     
     local g2 = CreateGroup(p, "Cores de Destaque")
-    CreateSlider(g2, "Destaque (R)", "color_ac_r", 0, 255, 220)
-    CreateSlider(g2, "Destaque (G)", "color_ac_g", 0, 255, 50)
-    CreateSlider(g2, "Destaque (B)", "color_ac_b", 0, 255, 50)
+    CreateSlider(g2, "Destaque (R)", "color_ac_r", 0, 255, 180)
+    CreateSlider(g2, "Destaque (G)", "color_ac_g", 0, 255, 255)
+    CreateSlider(g2, "Destaque (B)", "color_ac_b", 0, 255, 0)
     
     local applyBtn = new("TextButton", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = Theme.accent, Text = "APLICAR CORES", Font = Enum.Font.GothamBlack, TextSize = 18, TextColor3 = Color3.new(1,1,1), AutoButtonColor = false}, p, "accent")
     corner(applyBtn, 8)
     applyBtn.MouseButton1Click:Connect(function()
-        Theme.bg = Color3.fromRGB(getNum("color_bg_r", 255), getNum("color_bg_g", 255), getNum("color_bg_b", 255))
-        Theme.panel = Theme.bg:Lerp(Color3.new(0,0,0), 0.05)
-        Theme.accent = Color3.fromRGB(getNum("color_ac_r", 220), getNum("color_ac_g", 50), getNum("color_ac_b", 50))
+        Theme.bg = Color3.fromRGB(getNum("color_bg_r", 15), getNum("color_bg_g", 15), getNum("color_bg_b", 20))
+        Theme.panel = Theme.bg:Lerp(Color3.new(1,1,1), 0.05)
+        Theme.accent = Color3.fromRGB(getNum("color_ac_r", 180), getNum("color_ac_g", 255), getNum("color_ac_b", 0))
         
-        -- Inverte a cor do texto baseada no fundo para ficar visível
         if (Theme.bg.R + Theme.bg.G + Theme.bg.B) / 3 < 128 then
             Theme.text = Color3.new(1,1,1); Theme.sub = Color3.fromRGB(180,180,180)
             Theme.stroke = Color3.fromRGB(80,80,80); Theme.track = Color3.fromRGB(50,50,50)
@@ -284,7 +295,6 @@ AddPage("Settings", "Mude as cores e o visual", function(p)
             Theme.text = Color3.fromRGB(20,20,20); Theme.sub = Color3.fromRGB(100,100,100)
             Theme.stroke = Color3.fromRGB(200,200,200); Theme.track = Color3.fromRGB(220,220,220)
         end
-        
         UpdateUITheme()
     end)
 end)
@@ -364,20 +374,9 @@ end)
 AddNav("Aimbot"); AddNav("Silent Aim"); AddNav("Trigger Bot"); AddNav("Visuals"); AddNav("Player"); AddNav("Misc"); AddNav("Settings")
 SwitchPage("Aimbot")
 
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-    local mk = get("misc_menukey", {Key="RightShift", Mode="Toggle"})
-    local match = (input.KeyCode.Name == mk.Key) or (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB")
-    if mk.Mode == "Toggle" and match then GUI.Enabled = not GUI.Enabled
-    elseif mk.Mode == "Hold" and match then GUI.Enabled = true end
-end)
-UserInputService.InputEnded:Connect(function(input)
-    local mk = get("misc_menukey", {Key="RightShift", Mode="Toggle"})
-    local match = (input.KeyCode.Name == mk.Key) or (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB")
-    if mk.Mode == "Hold" and match then GUI.Enabled = false end
-end)
-
--- LÓGICA
+-- ============================================================
+-- LÓGICA PRINCIPAL
+-- ============================================================
 local function viewportMouse()
     local m = UserInputService:GetMouseLocation()
     local inset = Vector2.new(0, 36)
@@ -396,7 +395,7 @@ local function isKeybindActive(data)
     if data.Mode == "Always" then return true end
     if data.Mode == "Hold" then return isDown end
     if data.Mode == "Toggle" then
-        local sk = "tgl_" .. tostring(data.Key)
+        local sk = "tgl_" .. tostring(data.Key) .. tostring(data.Mode)
         if isDown and not Prefs[sk .. "_prev"] then Prefs[sk] = not Prefs[sk] end
         Prefs[sk .. "_prev"] = isDown
         return Prefs[sk]
@@ -440,7 +439,7 @@ end
 
 local fovCircle = new("Frame", {Size = UDim2.fromOffset(100, 100), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, Visible = false}, Overlay)
 new("UICorner", {CornerRadius = UDim.new(1, 0)}, fovCircle)
-local fovStroke = new("UIStroke", {Thickness = 2}, fovCircle)
+local fovStroke = new("UIStroke", {Thickness = 2, Color = Theme.accent}, fovCircle)
 
 RunService.RenderStepped:Connect(function()
     local cam = Workspace.CurrentCamera
@@ -453,6 +452,7 @@ RunService.RenderStepped:Connect(function()
         fovCircle.Size = UDim2.fromOffset(getNum("aim_fov", 120) * 2, getNum("aim_fov", 120) * 2); fovCircle.Visible = true
     else fovCircle.Visible = false end
     
+    -- Aimbot
     if get("aim_on") and isKeybindActive(get("aim_keybind", {Key="RMB", Mode="Hold"})) then
         local target = findTarget(getNum("aim_fov", 120), get("aim_bone", "Head"), get("aim_team", true), get("aim_visible", false))
         if target then
@@ -469,6 +469,7 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
+    -- Triggerbot
     if get("trg_on") and isKeybindActive(get("trg_keybind", {Key="E", Mode="Toggle"})) then
         local target = findTarget(60, get("trg_zone", "Head"), true, false)
         if target and math.random(1,100) <= getNum("trg_hit", 100) then
@@ -484,6 +485,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+-- Silent Aim (Hook Seguro)
 local silentPart = nil
 RunService.RenderStepped:Connect(function()
     if not get("sil_on") or not isKeybindActive(get("sil_keybind", {Key="Always", Mode="Always"})) then silentPart = nil; return end
@@ -510,7 +512,7 @@ pcall(function()
     end)
 end)
 
--- ESP (Matemática Direta Garantida)
+-- ESP (Matemática Direta Corrigida)
 local ESP = {}
 local BONES = {{"Head","UpperTorso"},{"UpperTorso","LowerTorso"},{"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"}}
 
@@ -518,6 +520,7 @@ local function destroyESP(e)
     if e.Box then e.Box:Destroy() end
     if e.Label then e.Label:Destroy() end
     if e.Highlight then e.Highlight:Destroy() end
+    if e.HealthBack then e.HealthBack:Destroy() end
     if e.Bones then for _,b in pairs(e.Bones) do b:Destroy() end end
 end
 
@@ -547,23 +550,25 @@ RunService.RenderStepped:Connect(function()
                         e.Stroke = new("UIStroke", {Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, e.Box)
                         e.Label = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.fromOffset(200,20), AnchorPoint = Vector2.new(0.5,1), Font = Enum.Font.GothamBlack, TextStrokeTransparency = 0.5, Visible = false}, Overlay)
                         e.Highlight = Instance.new("Highlight", Overlay)
+                        e.HealthBack = new("Frame", {BackgroundColor3 = Color3.fromRGB(20,20,20), BorderSizePixel = 0, AnchorPoint = Vector2.new(1, 0), Visible = false}, Overlay); corner(e.HealthBack, 2)
+                        e.HealthFill = new("Frame", {BorderSizePixel = 0, AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0), Visible = false}, e.HealthBack); corner(e.HealthFill, 2)
                         ESP[char] = e
                     end
                     
-                    -- Projeção do tamanho
-                    local head = char:FindFirstChild("Head") or hrp
-                    local topPos = head.Position + Vector3.new(0, 0.5, 0)
-                    local botPos = hrp.Position - Vector3.new(0, 3, 0)
-                    local spTop, onTop = cam:WorldToViewportPoint(topPos)
-                    local spBot, onBot = cam:WorldToViewportPoint(botPos)
+                    local cf, size = char:GetBoundingBox()
+                    local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+                    local any = false
+                    for ix = -1, 1, 2 do for iy = -1, 1, 2 do for iz = -1, 1, 2 do
+                        local c3 = cf:PointToWorldSpace(Vector3.new(ix*size.X/2, iy*size.Y/2, iz*size.Z/2))
+                        local sp = cam:WorldToViewportPoint(c3)
+                        if sp.Z > 0 then any = true; minX = math.min(minX, sp.X); maxX = math.max(maxX, sp.X); minY = math.min(minY, sp.Y); maxY = math.max(maxY, sp.Y) end
+                    end end end
                     
-                    if onTop and onBot then
-                        local h = spBot.Y - spTop.Y
-                        local w = h * 0.6
-                        local x, y = spTop.X - w/2, spTop.Y
+                    if any and (maxX - minX) < 1000 and (maxY - minY) < 1000 then
+                        local w, h = maxX - minX, maxY - minY
                         
                         if get("esp_box") then
-                            e.Box.Position = UDim2.fromOffset(x, y); e.Box.Size = UDim2.fromOffset(w, h); e.Box.Visible = true
+                            e.Box.Position = UDim2.fromOffset(minX, minY); e.Box.Size = UDim2.fromOffset(w, h); e.Box.Visible = true
                             e.Stroke.Color = Theme.accent
                         else e.Box.Visible = false end
                         
@@ -572,8 +577,16 @@ RunService.RenderStepped:Connect(function()
                         if get("esp_distlabel") then table.insert(parts, string.format("[%d]", dist)) end
                         if #parts > 0 then
                             e.Label.Text = table.concat(parts, " "); e.Label.TextSize = 14; e.Label.TextColor3 = Theme.accent
-                            e.Label.Position = UDim2.fromOffset(spTop.X, y - 4); e.Label.Visible = true
+                            e.Label.Position = UDim2.fromOffset((minX+maxX)/2, minY - 4); e.Label.Visible = true
                         else e.Label.Visible = false end
+                        
+                        if get("esp_health") then
+                            local hum = char.Humanoid
+                            local frac = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                            e.HealthBack.Position = UDim2.fromOffset(minX - 5, minY); e.HealthBack.Size = UDim2.fromOffset(3, h)
+                            e.HealthFill.Size = UDim2.new(1, 0, frac, 0); e.HealthFill.BackgroundColor3 = Color3.fromRGB(255, 60, 60):Lerp(Color3.fromRGB(60, 235, 90), frac)
+                            e.HealthBack.Visible = true; e.HealthFill.Visible = true
+                        else e.HealthBack.Visible = false end
                         
                         if get("esp_skel") then
                             for i, pair in ipairs(BONES) do
@@ -594,7 +607,7 @@ RunService.RenderStepped:Connect(function()
                             end
                         else for _,b in pairs(e.Bones) do b.Visible = false end end
                     else
-                        e.Box.Visible = false; e.Label.Visible = false
+                        e.Box.Visible = false; e.Label.Visible = false; e.HealthBack.Visible = false
                         for _,b in pairs(e.Bones) do b.Visible = false end
                     end
                     
@@ -602,7 +615,7 @@ RunService.RenderStepped:Connect(function()
                         e.Highlight.Adornee = char; e.Highlight.FillColor = Theme.accent; e.Highlight.Enabled = true
                     else e.Highlight.Enabled = false end
                 else
-                    e.Box.Visible = false; e.Label.Visible = false; e.Highlight.Enabled = false
+                    e.Box.Visible = false; e.Label.Visible = false; e.Highlight.Enabled = false; e.HealthBack.Visible = false
                     for _,b in pairs(e.Bones) do b.Visible = false end
                 end
             end
@@ -655,10 +668,40 @@ RunService.Stepped:Connect(function()
     
     if get("vis_fullbright") then Lighting.Ambient = Color3.fromRGB(255,255,255); Lighting.OutdoorAmbient = Color3.fromRGB(255,255,255)
     else Lighting.Ambient = Color3.fromRGB(70,70,70); Lighting.OutdoorAmbient = Color3.fromRGB(128,128,128) end
+    
+    -- Weapon mods
+    for _, tool in pairs(char:GetChildren()) do
+        if tool:IsA("Tool") then
+            if get("wpn_recoil") then
+                for _, v in pairs(tool:GetDescendants()) do
+                    if v:IsA("NumberValue") and v.Name:lower():find("recoil") then v.Value = 0 end
+                end
+            end
+            if get("wpn_reload") then
+                for _, v in pairs(tool:GetDescendants()) do
+                    if v:IsA("NumberValue") and (v.Name:lower():find("reload") or v.Name:lower():find("cooldown")) then v.Value = 0 end
+                end
+            end
+        end
+    end
 end)
 
 LocalPlayer.Idled:Connect(function()
     if get("misc_afk", true) then VirtualUser:CaptureController(); VirtualUser:ClickButton2(Vector2.new()) end
+end)
+
+-- INPUT (Menu Toggle & Drag)
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    local mk = get("misc_menukey", {Key="RightShift", Mode="Toggle"})
+    local match = (input.KeyCode.Name == mk.Key) or (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB")
+    if mk.Mode == "Toggle" and match then GUI.Enabled = not GUI.Enabled
+    elseif mk.Mode == "Hold" and match then GUI.Enabled = true end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    local mk = get("misc_menukey", {Key="RightShift", Mode="Toggle"})
+    local match = (input.KeyCode.Name == mk.Key) or (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB")
+    if mk.Mode == "Hold" and match then GUI.Enabled = false end
 end)
 
 local dragging, dragStart, startPos = false, nil, nil
