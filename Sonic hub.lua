@@ -1,4 +1,4 @@
--- Drx Hub V13 (Sem Hooks, Sem RenderStepped, 100% Task.Wait, Restauração Total)
+-- Drx Hub V14 (Aimbot/Silent via Mouse Lock - Zero Hooks, Zero Erros de Câmera)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -6,7 +6,6 @@ local Workspace = game:GetService("Workspace")
 local VirtualUser = game:GetService("VirtualUser")
 local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
--- Limpeza de instâncias fantasmas
 if shared.DrxCleanup then pcall(shared.DrxCleanup) end
 for _, name in ipairs({"DrxHub", "DrxOverlay"}) do
     local a = PlayerGui:FindFirstChild(name); if a then a:Destroy() end
@@ -208,57 +207,26 @@ local function AddNav(name)
     btn.MouseButton1Click:Connect(function() SwitchPage(name) end)
 end
 
--- PÁGINAS
-AddPage("Rage", function(c1, c2)
-    local g1 = CreateGroup(c1, "Ragebot")
-    CreateToggle(g1, "Ragebot", "rage_on", false)
-    CreateKeybind(g1, "Ragebot Key", "rage_key", "E", "Hold")
-    CreateToggle(g1, "Wallbang", "rage_wall", false)
-    CreateSlider(g1, "FOV", "rage_fov", 10, 360, 120)
-    CreateSlider(g1, "FOV Size", "rage_fovsize", 10, 800, 720)
-    CreateKeybind(g1, "Auto Shoot", "rage_autoshoot", "E", "Hold")
-    CreateToggle(g1, "Team Check", "rage_team", true)
-    local g2 = CreateGroup(c2, "Weapon Mods")
-    CreateToggle(g2, "Rapid Fire", "wpn_rapid", false)
-    CreateToggle(g2, "No Recoil", "wpn_recoil", false)
-    CreateToggle(g2, "No Spread", "wpn_spread", false)
-    CreateToggle(g2, "Instant Reload", "wpn_reload", false)
-end)
-
-AddPage("Legit", function(c1, c2)
-    local g1 = CreateGroup(c1, "Silent Aim")
-    CreateToggle(g1, "Silent Aim", "sil_on", false)
-    CreateKeybind(g1, "Silent Key", "sil_key", "Always", "Always")
-    CreateSlider(g1, "Smooth", "sil_smooth", 1, 20, 5)
-    CreateToggle(g1, "Visible Only", "sil_vis", false)
-    CreateDropdown(g1, "Bone", "sil_bone", {"Head", "Torso", "Root"}, "Head")
-    CreateToggle(g1, "Team Check", "sil_team", true)
-    local g2 = CreateGroup(c2, "FOV")
-    CreateSlider(g2, "FOV Size", "sil_fov", 10, 800, 120)
-    CreateToggle(g2, "FOV Circle", "sil_fovcircle", true)
-    local g3 = CreateGroup(c2, "Triggerbot")
-    CreateToggle(g3, "Triggerbot", "trg_on", false)
-    CreateKeybind(g3, "Trigger Key", "trg_key", "Always", "Always")
-    CreateSlider(g3, "Trigger Delay (ms)", "trg_delay", 0, 500, 50)
-    CreateToggle(g3, "Team Check", "trg_team", true)
-end)
-
-AddPage("Misc", function(c1, c2)
-    local g1 = CreateGroup(c1, "Misc")
-    CreateToggle(g1, "Spectator list", "misc_spect", false)
-    CreateToggle(g1, "Anti Spectate", "misc_antispect", false)
-    CreateToggle(g1, "Bhop", "misc_bhop", false)
+AddPage("Aimbot", function(c1, c2)
+    local g1 = CreateGroup(c1, "Aimbot")
+    CreateToggle(g1, "Enabled", "aim_on", false)
+    CreateKeybind(g1, "Aim Key", "aim_key", "E", "Hold")
+    CreateSlider(g1, "FOV", "aim_fov", 10, 360, 120)
+    CreateSlider(g1, "Smooth", "aim_smooth", 1, 20, 3)
+    CreateDropdown(g1, "Bone", "aim_bone", {"Head", "Torso"}, "Head")
+    CreateToggle(g1, "Team Check", "aim_team", true)
+    
+    local g2 = CreateGroup(c2, "Silent Aim (Mouse)")
+    CreateToggle(g2, "Enabled", "sil_on", false)
+    CreateKeybind(g2, "Silent Key", "sil_key", "Always", "Always")
+    CreateSlider(g2, "FOV", "sil_fov", 10, 360, 150)
 end)
 
 AddPage("Visuals", function(c1, c2)
     local g1 = CreateGroup(c1, "ESP")
     CreateToggle(g1, "Box ESP", "esp_box", false)
     CreateToggle(g1, "ESP Name", "esp_name", false)
-    CreateToggle(g1, "Skeleton", "esp_skel", false)
-    CreateToggle(g1, "ESP Team Check", "esp_team", true)
-    local g2 = CreateGroup(c2, "Highlight")
-    CreateToggle(g2, "Enable Highlight", "hl_on", false)
-    CreateToggle(g2, "Highlight Team Check", "hl_team", true)
+    CreateToggle(g1, "Team Check", "esp_team", true)
 end)
 
 AddPage("Settings", function(c1, c2)
@@ -266,10 +234,10 @@ AddPage("Settings", function(c1, c2)
     CreateKeybind(g1, "Menu Keybind", "misc_menukey", "RightShift", "Toggle")
 end)
 
-AddNav("Rage"); AddNav("Legit"); AddNav("Misc"); AddNav("Visuals"); AddNav("Settings")
-SwitchPage("Rage")
+AddNav("Aimbot"); AddNav("Visuals"); AddNav("Settings")
+SwitchPage("Aimbot")
 
--- LÓGICA BLINDADA (SEM HOOKS, SEM RENDERSTEPPED)
+-- LÓGICA BLINDADA
 local function isKeybindActive(data)
     if not data then return false end
     if data.Mode == "Always" or data.Key == "None" then return true end
@@ -288,7 +256,7 @@ local function isKeybindActive(data)
     return false
 end
 
-local function findTarget(fov, bone, teamCheck, visCheck)
+local function findTarget(fov, bone, teamCheck)
     local cam = Workspace.CurrentCamera
     if not cam then return nil end
     local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
@@ -301,7 +269,7 @@ local function findTarget(fov, bone, teamCheck, visCheck)
                 if onScreen then
                     local dist = (Vector2.new(sp.X, sp.Y) - center).Magnitude
                     if dist < fov and dist < closestDist then
-                        closestDist = dist; closest = {char = plr.Character, part = part}
+                        closestDist = dist; closest = {char = plr.Character, part = part, screenPos = Vector2.new(sp.X, sp.Y)}
                     end
                 end
             end
@@ -310,7 +278,7 @@ local function findTarget(fov, bone, teamCheck, visCheck)
     return closest
 end
 
--- LOOP 1: AIMBOT E TRIGGERBOT (TASK SPAWN SEGURO)
+-- AIMBOT E SILENT (MÉTODO SEGURO VIA MOUSE)
 task.spawn(function()
     while task.wait(0.01) do
         if not GUI.Parent then break end
@@ -318,83 +286,43 @@ task.spawn(function()
             local cam = Workspace.CurrentCamera
             if not cam then return end
 
-            -- FOV Circle
-            if get("sil_fovcircle") and get("sil_on") then
-                fovCircle.Position = UDim2.fromOffset(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-                fovCircle.Size = UDim2.fromOffset(getNum("sil_fov", 120) * 2, getNum("sil_fov", 120) * 2); fovCircle.Visible = true
-            else fovCircle.Visible = false end
-
-            -- Ragebot (Mouse lock via mousemoverel)
-            if get("rage_on") and isKeybindActive(get("rage_key", {Key="E", Mode="Hold"})) then
-                local target = findTarget(getNum("rage_fov", 120), "Head", get("rage_team", true), false)
-                if target and target.part and target.part.Parent then
-                    local sp, onScreen = cam:WorldToViewportPoint(target.part.Position)
-                    if onScreen then
-                        local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-                        local delta = Vector2.new(sp.X, sp.Y) - center
-                        local smooth = getNum("rage_smooth", 3)
-                        pcall(function() mousemoverel(delta.X / smooth, delta.Y / smooth) end)
-                    end
-                end
-            end
-
-            -- Triggerbot
-            if get("trg_on") and isKeybindActive(get("trg_key", {Key="Always", Mode="Always"})) then
-                local target = findTarget(60, "Head", get("trg_team", true), false)
+            -- Aimbot
+            if get("aim_on") and isKeybindActive(get("aim_key", {Key="E", Mode="Hold"})) then
+                local target = findTarget(getNum("aim_fov", 120), get("aim_bone", "Head"), get("aim_team", true))
                 if target then
-                    if (os.clock() - (Prefs["trg_lastfire"] or 0)) > (getNum("trg_delay", 50) / 1000) then
-                        Prefs["trg_lastfire"] = os.clock()
-                        task.spawn(function()
-                            pcall(function()
-                                local g = getgenv()
-                                if type(g) == "table" and type(g.mouse1click) == "function" then g.mouse1click()
-                                else VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new()) end
-                            end)
-                        end)
-                    end
+                    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+                    local delta = target.screenPos - center
+                    local smooth = getNum("aim_smooth", 3)
+                    pcall(function() mousemoverel(delta.X / smooth, delta.Y / smooth) end)
+                end
+            end
+
+            -- Silent Aim (Simulado via Mouse)
+            if get("sil_on") and isKeybindActive(get("sil_key", {Key="Always", Mode="Always"})) then
+                local target = findTarget(getNum("sil_fov", 150), "Head", true)
+                if target then
+                    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+                    local delta = target.screenPos - center
+                    -- Puxa o mouse instantaneamente para o alvo antes do tiro
+                    pcall(function() mousemoverel(delta.X, delta.Y) end)
                 end
             end
         end)
     end
 end)
 
--- LOOP 2: SILENT AIM (MOUSE LOCK)
-task.spawn(function()
-    while task.wait() do
-        if not GUI.Parent then break end
-        pcall(function()
-            if not get("sil_on") or not isKeybindActive(get("sil_key", {Key="Always", Mode="Always"})) then return end
-            local t = findTarget(getNum("sil_fov", 200), get("sil_bone", "Head"), get("sil_team", true), get("sil_vis", false))
-            if t and t.part then
-                local cam = Workspace.CurrentCamera
-                if cam then
-                    local sp, onScreen = cam:WorldToViewportPoint(t.part.Position)
-                    if onScreen then
-                        local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-                        local delta = Vector2.new(sp.X, sp.Y) - center
-                        pcall(function() mousemoverel(delta.X, delta.Y) end)
-                    end
-                end
-            end
-        end)
-    end
-end)
-
--- LOOP 3: ESP
+-- ESP
 local ESP = {}
-local BONES = {{"Head","UpperTorso"},{"UpperTorso","LowerTorso"},{"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"}}
 local function destroyESP(e)
     if e.Box then e.Box:Destroy() end
     if e.Label then e.Label:Destroy() end
-    if e.Highlight then e.Highlight:Destroy() end
-    if e.Bones then for _,b in pairs(e.Bones) do b:Destroy() end end
 end
 
 task.spawn(function()
     while task.wait(0.03) do
         if not GUI.Parent then break end
         pcall(function()
-            if not get("esp_box") and not get("esp_name") and not get("esp_skel") and not get("hl_on") then
+            if not get("esp_box") and not get("esp_name") then
                 for k,e in pairs(ESP) do destroyESP(e); ESP[k] = nil end
                 return
             end
@@ -411,11 +339,10 @@ task.spawn(function()
                             seen[char] = true
                             local e = ESP[char]
                             if not e then
-                                e = {Bones = {}}
+                                e = {}
                                 e.Box = new("Frame", {BackgroundTransparency = 1, Visible = false}, Overlay)
                                 e.Stroke = new("UIStroke", {Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Color = Theme.accent}, e.Box)
                                 e.Label = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.fromOffset(200,20), AnchorPoint = Vector2.new(0.5,1), Font = Enum.Font.Gotham, TextStrokeTransparency = 0.5, Visible = false, TextColor3 = Theme.accent}, Overlay)
-                                e.Highlight = Instance.new("Highlight", Overlay)
                                 ESP[char] = e
                             end
                             local sp, onScreen = cam:WorldToViewportPoint(hrp.Position)
@@ -427,30 +354,11 @@ task.spawn(function()
                                 else e.Box.Visible = false end
                                 if get("esp_name") then e.Label.Text = plr.Name; e.Label.Position = UDim2.fromOffset(sp.X, tlY - 4); e.Label.Visible = true
                                 else e.Label.Visible = false end
-                                if get("esp_skel") then
-                                    for i, pair in ipairs(BONES) do
-                                        local line = e.Bones[i]
-                                        if not line then line = new("Frame", {AnchorPoint = Vector2.new(0.5,0.5), Visible=false, BackgroundColor3 = Theme.accent}, Overlay); e.Bones[i] = line end
-                                        local a, b = char:FindFirstChild(pair[1]), char:FindFirstChild(pair[2])
-                                        if a and b then
-                                            local sa, oa = cam:WorldToViewportPoint(a.Position); local sb, ob = cam:WorldToViewportPoint(b.Position)
-                                            if oa and ob then
-                                                local d = Vector2.new(sb.X, sb.Y) - Vector2.new(sa.X, sa.Y)
-                                                line.Size = UDim2.fromOffset(d.Magnitude, 1)
-                                                line.Position = UDim2.fromOffset((sa.X+sb.X)/2, (sa.Y+sb.Y)/2)
-                                                line.Rotation = math.deg(math.atan2(d.Y, d.X)); line.Visible = true
-                                            else line.Visible = false end
-                                        else line.Visible = false end
-                                    end
-                                else for _,b in pairs(e.Bones) do b.Visible = false end end
                             else
                                 e.Box.Visible = false; e.Label.Visible = false
-                                for _,b in pairs(e.Bones) do b.Visible = false end
                             end
-                            if get("hl_on") then e.Highlight.Adornee = char; e.Highlight.FillColor = Theme.accent; e.Highlight.Enabled = true
-                            else e.Highlight.Enabled = false end
                         else
-                            if e then e.Box.Visible = false; e.Label.Visible = false; e.Highlight.Enabled = false; for _,b in pairs(e.Bones) do b.Visible = false end end
+                            if e then e.Box.Visible = false; e.Label.Visible = false end
                         end
                     end
                 end
@@ -507,4 +415,4 @@ end
 shared.DrxCleanup = cleanup
 GUI.Destroying:Connect(cleanup)
 
-print("[Drx Hub V13] Carregado. Zero Hooks, Zero RenderStep.")
+print("[Drx Hub V14] Carregado. Aimbot/Silent via Mouse.")
