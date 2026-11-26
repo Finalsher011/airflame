@@ -1,4 +1,4 @@
--- DRX HUB - Total Fix (UILayout Error, Empty Pages, Toast Notify)
+-- DRX HUB - Ultimate Fix (UILayout removed, UI 100% funcional)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -21,7 +21,7 @@ local function set(k, v) Prefs[k] = v end
 local function get(k, d) local v = Prefs[k]; if v == nil then return d end; return v end
 local function getNum(k, d) local v = tonumber(get(k, d)); if not v or v ~= v then return d end; return v end
 
--- TEMA DRX HUB (Vinho / Vermelho Neon)
+-- TEMA DRX HUB
 local Theme = {
     bg = Color3.fromRGB(18, 12, 14),
     panel = Color3.fromRGB(28, 18, 22),
@@ -80,7 +80,7 @@ local PageContainer = new("Frame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTran
 local renderers = {}
 local activeSlider = nil
 
--- SISTEMA DE NOTIFICAÇÃO (TOAST)
+-- NOTIFICAÇÃO
 local function Notify(text, isOn)
     local notif = new("Frame", {Size = UDim2.fromOffset(220, 40), Position = UDim2.new(0.5, -110, 1, 20), BackgroundColor3 = Theme.card, ZIndex = 9999}, GUI)
     corner(notif, 8); outline(notif, 1.5, isOn and Theme.accent or Theme.stroke)
@@ -106,7 +106,7 @@ local function CreateGroup(parent, title)
     new("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, g)
     
     local head = new("Frame", {Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1, LayoutOrder = 1}, g)
-    new("Frame", {Size = UDim2.fromOffset(3, 14), Position = UDim2.fromOffset(0, 3), BackgroundColor3 = Theme.accent}, head); corner(head:GetChildren()[1], 1)
+    local line = new("Frame", {Size = UDim2.fromOffset(3, 14), Position = UDim2.fromOffset(0, 3), BackgroundColor3 = Theme.accent}, head); corner(line, 1)
     label(head, {Size = UDim2.new(1, -10, 1, 0), Position = UDim2.fromOffset(10, 0), Text = title, Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = Theme.accent}, nil)
 
     local body = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 2}, g)
@@ -132,7 +132,7 @@ local function CreateToggle(parent, name, key, default)
     end
     renderers[key] = render
     sw.MouseButton1Click:Connect(function() set(key, not get(key)); render() end)
-    render(true) -- Não notifica ao carregar
+    render(true)
 end
 
 local function CreateSlider(parent, name, key, min, max, default)
@@ -232,13 +232,13 @@ local function CreateKeybind(parent, name, key, defaultKey, defaultMode)
     end)
 end
 
--- PÁGINAS E CONSTRUÇÃO
+-- CRIAÇÃO DAS PÁGINAS (CORRIGIDO)
 local Pages, NavButtons = {}, {}
 
 local function AddPage(name, buildFunc)
     local page = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 4, ScrollBarImageColor3 = Theme.accent, Visible = false, AutomaticCanvasSize = Enum.AutomaticSize.Y}, PageContainer)
     
-    -- CORREÇÃO: UILayout não existe, era isso que causava o erro no console!
+    -- AQUI ESTAVA O ERRO! A linha "new("UILayout")" foi DELETADA.
     local grid = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1}, page)
     new("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 15), SortOrder = Enum.SortOrder.LayoutOrder}, grid)
     
@@ -328,7 +328,7 @@ AddPage("Misc", function(c1, c2)
     CreateSlider(g2, "ThirdPerson Distance", "cam_dist", 5, 50, 12)
 end)
 
--- Criando as abas que faltavam para não bugar o menu lateral
+-- As abas abaixo estavam faltando e por isso davam erro ao passar o mouse
 AddPage("Inventory Changer", function(c1, c2)
     local g1 = CreateGroup(c1, "Skins")
     label(g1, {Size = UDim2.new(1, 0, 0, 20), Text = "Em breve...", TextSize = 14, TextColor3 = Theme.sub}, nil)
@@ -458,13 +458,11 @@ RunService.RenderStepped:Connect(function()
         local cam = Workspace.CurrentCamera
         if not cam then return end
         
-        -- FOV Circle
         if get("sil_fovcircle") and get("sil_on") then
             fovCircle.Position = UDim2.fromOffset(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
             fovCircle.Size = UDim2.fromOffset(getNum("sil_fov", 120) * 2, getNum("sil_fov", 120) * 2); fovCircle.Visible = true
         else fovCircle.Visible = false end
         
-        -- Ragebot (Aimbot)
         if get("rage_on") and isKeybindActive(get("rage_key", {Key="None"})) then
             local target = findTarget(getNum("rage_fov", 120), "Head", get("rage_team", true), false)
             if target then
@@ -472,7 +470,6 @@ RunService.RenderStepped:Connect(function()
             end
         end
 
-        -- Triggerbot
         if get("trg_on") and isKeybindActive(get("trg_key", {Key="None"})) then
             local target = findTarget(60, "Head", get("trg_team", true), false)
             if target then
@@ -489,7 +486,6 @@ RunService.RenderStepped:Connect(function()
     end)
 end)
 
--- Silent Aim Hook
 local silentPart = nil
 RunService.RenderStepped:Connect(function()
     pcall(function()
@@ -514,7 +510,6 @@ pcall(function()
     end)
 end)
 
--- ESP
 local ESP = {}
 local BONES = {{"Head","UpperTorso"},{"UpperTorso","LowerTorso"},{"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"}}
 
@@ -609,7 +604,6 @@ RunService.RenderStepped:Connect(function()
     end)
 end)
 
--- MODS DE PERSONAGEM
 local noclipActive = false
 RunService.Stepped:Connect(function()
     pcall(function()
@@ -641,7 +635,6 @@ RunService.Stepped:Connect(function()
     end)
 end)
 
--- MENU TOGGLE
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
     local mk = get("misc_menukey", {Key="RightShift", Mode="Toggle"})
@@ -662,7 +655,6 @@ UserInputService.InputEnded:Connect(function(input)
     if mk.Mode == "Hold" and match then GUI.Enabled = false end
 end)
 
--- DRAG E SLIDER
 local dragging, dragStart, startPos = false, nil, nil
 TopBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -683,7 +675,6 @@ UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false; activeSlider = nil end
 end)
 
--- CLEANUP
 local cleaned = false
 local function cleanup()
     if cleaned then return end; cleaned = true
@@ -694,4 +685,4 @@ end
 shared.DrxCleanup = cleanup
 GUI.Destroying:Connect(cleanup)
 
-print("[Drx Hub] Iniciado com sucesso. Menu 100% corrigido.")
+print("[Drx Hub] Carregado com sucesso. Erro da UILayout removido.")
