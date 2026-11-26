@@ -1,11 +1,13 @@
--- Drx Hub V7 (Apenas Task.Wait - 100% Livre do Erro RenderStep)
+-- Drx Hub V9 (Aimbot Mouse-Lock, ESP Seguro, Zero Erros de Câmera)
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local VirtualUser = game:GetService("VirtualUser")
 local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
+-- Limpeza agressiva de scripts e menus antigos
 if shared.DrxCleanup then pcall(shared.DrxCleanup) end
 for _, name in ipairs({"DrxHub", "DrxOverlay"}) do
     local a = PlayerGui:FindFirstChild(name); if a then a:Destroy() end
@@ -246,10 +248,7 @@ AddPage("Misc", function(c1, c2)
     CreateToggle(g1, "Spectator list", "misc_spect", false)
     CreateToggle(g1, "Anti Spectate", "misc_antispect", false)
     CreateToggle(g1, "Bhop", "misc_bhop", false)
-    local g2 = CreateGroup(c2, "Camera")
-    CreateToggle(g2, "Third Person", "cam_third", false)
-    CreateKeybind(g2, "Third Person Key", "cam_key", "None", "Toggle")
-    CreateSlider(g2, "ThirdPerson Distance", "cam_dist", 5, 50, 12)
+    -- A opção "Third Person" foi removida permanentemente para não conflitar com a câmera do Roblox.
 end)
 
 AddPage("Inventory Changer", function(c1, c2)
@@ -351,62 +350,62 @@ local fovCircle = new("Frame", {Size = UDim2.fromOffset(100, 100), AnchorPoint =
 new("UICorner", {CornerRadius = UDim.new(1, 0)}, fovCircle)
 new("UIStroke", {Thickness = 1, Color = Theme.accent}, fovCircle)
 
--- LOOP 1: AIMBOT E FOV (Task Spawn)
-task.spawn(function()
-    while task.wait(0.01) do
-        if not GUI.Parent then break end
-        pcall(function()
-            local cam = Workspace.CurrentCamera
-            if not cam then return end
+-- LOOP 1: AIMBOT (USANDO HEARTBEAT E MOUSE MOVE)
+RunService.Heartbeat:Connect(function()
+    if not GUI.Parent then return end
+    pcall(function()
+        local cam = Workspace.CurrentCamera
+        if not cam then return end
 
-            local circleStroke = fovCircle:FindFirstChild("UIStroke")
-            if circleStroke then circleStroke.Color = Theme.accent end
+        local circleStroke = fovCircle:FindFirstChild("UIStroke")
+        if circleStroke then circleStroke.Color = Theme.accent end
 
-            if get("sil_fovcircle") and get("sil_on") then
-                fovCircle.Position = UDim2.fromOffset(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-                fovCircle.Size = UDim2.fromOffset(getNum("sil_fov", 120) * 2, getNum("sil_fov", 120) * 2); fovCircle.Visible = true
-            else fovCircle.Visible = false end
+        if get("sil_fovcircle") and get("sil_on") then
+            fovCircle.Position = UDim2.fromOffset(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+            fovCircle.Size = UDim2.fromOffset(getNum("sil_fov", 120) * 2, getNum("sil_fov", 120) * 2); fovCircle.Visible = true
+        else fovCircle.Visible = false end
 
-            if get("rage_on") and isKeybindActive(get("rage_key", {Key="None"})) then
-                local target = findTarget(getNum("rage_fov", 120), "Head", get("rage_team", true), false)
-                if target and target.part and target.part.Parent then
-                    if cam.CameraType ~= Enum.CameraType.Scriptable and cam.CameraType ~= Enum.CameraType.Custom then
-                        cam.CameraType = Enum.CameraType.Custom
-                    end
-                    cam.CFrame = cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position, target.part.Position), 0.25)
+        if get("rage_on") and isKeybindActive(get("rage_key", {Key="None"})) then
+            local target = findTarget(getNum("rage_fov", 120), "Head", get("rage_team", true), false)
+            if target and target.part and target.part.Parent then
+                -- Usa mousemoverel (seguro) em vez de Camera.CFrame (quebra o jogo)
+                local sp, onScreen = cam:WorldToViewportPoint(target.part.Position)
+                if onScreen then
+                    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+                    local delta = Vector2.new(sp.X, sp.Y) - center
+                    local smooth = getNum("rage_smooth", 3)
+                    pcall(function()
+                        mousemoverel(delta.X / smooth, delta.Y / smooth)
+                    end)
                 end
             end
+        end
 
-            if get("trg_on") and isKeybindActive(get("trg_key", {Key="None"})) then
-                local target = findTarget(60, "Head", get("trg_team", true), false)
-                if target then
-                    if (os.clock() - (Prefs["trg_lastfire"] or 0)) > (getNum("trg_delay", 50) / 1000) then
-                        Prefs["trg_lastfire"] = os.clock()
-                        task.spawn(function()
-                            pcall(function()
-                                local g = getgenv()
-                                if type(g) == "table" and type(g.mouse1click) == "function" then g.mouse1click()
-                                else VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new()) end
-                            end)
-                        end)
-                    end
+        if get("trg_on") and isKeybindActive(get("trg_key", {Key="None"})) then
+            local target = findTarget(60, "Head", get("trg_team", true), false)
+            if target then
+                if (os.clock() - (Prefs["trg_lastfire"] or 0)) > (getNum("trg_delay", 50) / 1000) then
+                    Prefs["trg_lastfire"] = os.clock()
+                    pcall(function()
+                        local g = getgenv()
+                        if type(g) == "table" and type(g.mouse1click) == "function" then g.mouse1click()
+                        else VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new()) end
+                    end)
                 end
             end
-        end)
-    end
+        end
+    end)
 end)
 
 -- LOOP 2: SILENT AIM
 local silentPart = nil
-task.spawn(function()
-    while task.wait() do
-        if not GUI.Parent then break end
-        pcall(function()
-            if not get("sil_on") or not isKeybindActive(get("sil_key", {Key="None"})) then silentPart = nil; return end
-            local t = findTarget(getNum("sil_fov", 200), get("sil_bone", "Head"), get("sil_team", true), get("sil_vis", false))
-            silentPart = t and t.part or nil
-        end)
-    end
+RunService.Heartbeat:Connect(function()
+    if not GUI.Parent then return end
+    pcall(function()
+        if not get("sil_on") or not isKeybindActive(get("sil_key", {Key="None"})) then silentPart = nil; return end
+        local t = findTarget(getNum("sil_fov", 200), get("sil_bone", "Head"), get("sil_team", true), get("sil_vis", false))
+        silentPart = t and t.part or nil
+    end)
 end)
 
 pcall(function()
@@ -434,74 +433,72 @@ local function destroyESP(e)
     if e.Bones then for _,b in pairs(e.Bones) do b:Destroy() end end
 end
 
-task.spawn(function()
-    while task.wait(0.03) do
-        if not GUI.Parent then break end
-        pcall(function()
-            if not get("esp_box") and not get("esp_name") and not get("esp_skel") and not get("hl_on") then
-                for k,e in pairs(ESP) do destroyESP(e); ESP[k] = nil end
-                return
-            end
-            local cam = Workspace.CurrentCamera
-            if not cam then return end
-            local seen = {}
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= Players.LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
-                    if not get("esp_team") or plr.Team ~= Players.LocalPlayer.Team then
-                        local char = plr.Character
-                        local hrp = char.HumanoidRootPart
-                        local dist = (hrp.Position - cam.CFrame.Position).Magnitude
-                        if dist <= 1000 then
-                            seen[char] = true
-                            local e = ESP[char]
-                            if not e then
-                                e = {Bones = {}}
-                                e.Box = new("Frame", {BackgroundTransparency = 1, Visible = false}, Overlay)
-                                e.Stroke = new("UIStroke", {Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Color = Theme.accent}, e.Box)
-                                e.Label = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.fromOffset(200,20), AnchorPoint = Vector2.new(0.5,1), Font = Enum.Font.Gotham, TextStrokeTransparency = 0.5, Visible = false, TextColor3 = Theme.accent}, Overlay)
-                                e.Highlight = Instance.new("Highlight", Overlay)
-                                ESP[char] = e
-                            end
-                            local sp, onScreen = cam:WorldToViewportPoint(hrp.Position)
-                            if onScreen then
-                                local h = math.abs(cam:WorldToViewportPoint(hrp.Position + Vector3.new(0,3,0)).Y - cam:WorldToViewportPoint(hrp.Position - Vector3.new(0,3,0)).Y)
-                                local w = h * 0.65
-                                local tlX, tlY = sp.X - w/2, sp.Y - h/2
-                                if get("esp_box") then e.Box.Position = UDim2.fromOffset(tlX, tlY); e.Box.Size = UDim2.fromOffset(w, h); e.Box.Visible = true
-                                else e.Box.Visible = false end
-                                if get("esp_name") then e.Label.Text = plr.Name; e.Label.Position = UDim2.fromOffset(sp.X, tlY - 4); e.Label.Visible = true
-                                else e.Label.Visible = false end
-                                if get("esp_skel") then
-                                    for i, pair in ipairs(BONES) do
-                                        local line = e.Bones[i]
-                                        if not line then line = new("Frame", {AnchorPoint = Vector2.new(0.5,0.5), Visible=false, BackgroundColor3 = Theme.accent}, Overlay); e.Bones[i] = line end
-                                        local a, b = char:FindFirstChild(pair[1]), char:FindFirstChild(pair[2])
-                                        if a and b then
-                                            local sa, oa = cam:WorldToViewportPoint(a.Position); local sb, ob = cam:WorldToViewportPoint(b.Position)
-                                            if oa and ob then
-                                                local d = Vector2.new(sb.X, sb.Y) - Vector2.new(sa.X, sa.Y)
-                                                line.Size = UDim2.fromOffset(d.Magnitude, 1)
-                                                line.Position = UDim2.fromOffset((sa.X+sb.X)/2, (sa.Y+sb.Y)/2)
-                                                line.Rotation = math.deg(math.atan2(d.Y, d.X)); line.Visible = true
-                                            else line.Visible = false end
-                                        else line.Visible = false end
-                                    end
-                                else for _,b in pairs(e.Bones) do b.Visible = false end end
-                            else
-                                e.Box.Visible = false; e.Label.Visible = false
-                                for _,b in pairs(e.Bones) do b.Visible = false end
-                            end
-                            if get("hl_on") then e.Highlight.Adornee = char; e.Highlight.FillColor = Theme.accent; e.Highlight.Enabled = true
-                            else e.Highlight.Enabled = false end
-                        else
-                            if e then e.Box.Visible = false; e.Label.Visible = false; e.Highlight.Enabled = false; for _,b in pairs(e.Bones) do b.Visible = false end end
+RunService.Heartbeat:Connect(function()
+    if not GUI.Parent then return end
+    pcall(function()
+        if not get("esp_box") and not get("esp_name") and not get("esp_skel") and not get("hl_on") then
+            for k,e in pairs(ESP) do destroyESP(e); ESP[k] = nil end
+            return
+        end
+        local cam = Workspace.CurrentCamera
+        if not cam then return end
+        local seen = {}
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= Players.LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
+                if not get("esp_team") or plr.Team ~= Players.LocalPlayer.Team then
+                    local char = plr.Character
+                    local hrp = char.HumanoidRootPart
+                    local dist = (hrp.Position - cam.CFrame.Position).Magnitude
+                    if dist <= 1000 then
+                        seen[char] = true
+                        local e = ESP[char]
+                        if not e then
+                            e = {Bones = {}}
+                            e.Box = new("Frame", {BackgroundTransparency = 1, Visible = false}, Overlay)
+                            e.Stroke = new("UIStroke", {Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Color = Theme.accent}, e.Box)
+                            e.Label = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.fromOffset(200,20), AnchorPoint = Vector2.new(0.5,1), Font = Enum.Font.Gotham, TextStrokeTransparency = 0.5, Visible = false, TextColor3 = Theme.accent}, Overlay)
+                            e.Highlight = Instance.new("Highlight", Overlay)
+                            ESP[char] = e
                         end
+                        local sp, onScreen = cam:WorldToViewportPoint(hrp.Position)
+                        if onScreen then
+                            local h = math.abs(cam:WorldToViewportPoint(hrp.Position + Vector3.new(0,3,0)).Y - cam:WorldToViewportPoint(hrp.Position - Vector3.new(0,3,0)).Y)
+                            local w = h * 0.65
+                            local tlX, tlY = sp.X - w/2, sp.Y - h/2
+                            if get("esp_box") then e.Box.Position = UDim2.fromOffset(tlX, tlY); e.Box.Size = UDim2.fromOffset(w, h); e.Box.Visible = true
+                            else e.Box.Visible = false end
+                            if get("esp_name") then e.Label.Text = plr.Name; e.Label.Position = UDim2.fromOffset(sp.X, tlY - 4); e.Label.Visible = true
+                            else e.Label.Visible = false end
+                            if get("esp_skel") then
+                                for i, pair in ipairs(BONES) do
+                                    local line = e.Bones[i]
+                                    if not line then line = new("Frame", {AnchorPoint = Vector2.new(0.5,0.5), Visible=false, BackgroundColor3 = Theme.accent}, Overlay); e.Bones[i] = line end
+                                    local a, b = char:FindFirstChild(pair[1]), char:FindFirstChild(pair[2])
+                                    if a and b then
+                                        local sa, oa = cam:WorldToViewportPoint(a.Position); local sb, ob = cam:WorldToViewportPoint(b.Position)
+                                        if oa and ob then
+                                            local d = Vector2.new(sb.X, sb.Y) - Vector2.new(sa.X, sa.Y)
+                                            line.Size = UDim2.fromOffset(d.Magnitude, 1)
+                                            line.Position = UDim2.fromOffset((sa.X+sb.X)/2, (sa.Y+sb.Y)/2)
+                                            line.Rotation = math.deg(math.atan2(d.Y, d.X)); line.Visible = true
+                                        else line.Visible = false end
+                                    else line.Visible = false end
+                                end
+                            else for _,b in pairs(e.Bones) do b.Visible = false end end
+                        else
+                            e.Box.Visible = false; e.Label.Visible = false
+                            for _,b in pairs(e.Bones) do b.Visible = false end
+                        end
+                        if get("hl_on") then e.Highlight.Adornee = char; e.Highlight.FillColor = Theme.accent; e.Highlight.Enabled = true
+                        else e.Highlight.Enabled = false end
+                    else
+                        if e then e.Box.Visible = false; e.Label.Visible = false; e.Highlight.Enabled = false; for _,b in pairs(e.Bones) do b.Visible = false end end
                     end
                 end
             end
-            for k,e in pairs(ESP) do if not seen[k] then destroyESP(e); ESP[k] = nil end end
-        end)
-    end
+        end
+        for k,e in pairs(ESP) do if not seen[k] then destroyESP(e); ESP[k] = nil end end
+    end)
 end)
 
 -- INPUTS
@@ -551,4 +548,4 @@ end
 shared.DrxCleanup = cleanup
 GUI.Destroying:Connect(cleanup)
 
-print("[Drx Hub] Carregado com sucesso. Sem RenderStepped.")
+print("[Drx Hub V9] 100% Seguro. Câmera intacta, Aimbot via Mouse.")
