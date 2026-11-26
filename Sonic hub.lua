@@ -1,4 +1,4 @@
--- Drx Hub V17 [V16 + correcoes: silent/wallcheck/trigger/camera/bhop + sonda] (todas as opções funcionais + opções do vídeo luau.pro) - interface original preservada
+-- Drx Hub V18 [V17 + UiMouse: mouse livre com o menu aberto] [V16 + correcoes: silent/wallcheck/trigger/camera/bhop + sonda] (todas as opções funcionais + opções do vídeo luau.pro) - interface original preservada
 -- Fontes: [fornecido] drx8.lua + vídeo | [derivado] opções lidas dos frames do vídeo | [assumido] ver comentários "Assumido"
 -- Dados dependentes de jogo ficam em GameConfig (nil = desconhecido). Nada foi compilado/testado no Roblox aqui.
 local Players = game:GetService("Players")
@@ -7,6 +7,7 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local VirtualUser = game:GetService("VirtualUser")
 local RunService = game:GetService("RunService")
+local ContextActionService = game:GetService("ContextActionService")
 local Debris = game:GetService("Debris")
 local TextService = game:GetService("TextService")
 local LP = Players.LocalPlayer
@@ -14,7 +15,7 @@ local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
 -- Limpeza
 if shared.DrxCleanup then pcall(shared.DrxCleanup) end
-for _, name in ipairs({"DrxHub", "DrxOverlay"}) do
+for _, name in ipairs({"DrxHub", "DrxOverlay", "DrxMouseModal"}) do
     local a = PlayerGui:FindFirstChild(name); if a then a:Destroy() end
     local b = game:GetService("CoreGui"):FindFirstChild(name); if b then b:Destroy() end
 end
@@ -52,6 +53,47 @@ local function tween(i, p) TweenService:Create(i, TWEEN, p):Play() end
 
 local GUI = new("ScreenGui", {Name = "DrxHub", ResetOnSpawn = false, DisplayOrder = 100, ZIndexBehavior = Enum.ZIndexBehavior.Global, Enabled = true}, PlayerGui)
 local Overlay = new("ScreenGui", {Name = "DrxOverlay", ResetOnSpawn = false, DisplayOrder = 999, IgnoreGuiInset = true}, PlayerGui)
+
+-- ---------- UiMouse: cursor livre com o menu aberto; comportamento normal do jogo ao fechar ----------
+-- Fonte: [derivado] do pedido (abrir = mouse livre, fechar = normal). Ligado a GUI.Enabled, que é o único estado de aberto/fechado do menu.
+local UiMouse = {open = false, saved = nil, modal = nil}
+do
+    local ACTION_SINK, STEP_NAME = "DrxUiMouseSink", "DrxUiMouseUnlock"
+    local function sink() return Enum.ContextActionResult.Sink end
+    function UiMouse.setOpen(open)
+        open = open and true or false
+        if open == UiMouse.open then return end
+        UiMouse.open = open
+        if open then
+            UiMouse.saved = {behavior = UserInputService.MouseBehavior, icon = UserInputService.MouseIconEnabled}
+            -- Botão Modal: forma padrão de destravar o mouse em primeira pessoa.
+            local g = Instance.new("ScreenGui")
+            g.Name = "DrxMouseModal"; g.ResetOnSpawn = false; g.IgnoreGuiInset = true; g.DisplayOrder = 1
+            local b = Instance.new("TextButton")
+            b.Modal = true; b.BackgroundTransparency = 1; b.Text = ""; b.Size = UDim2.fromOffset(0, 0); b.Parent = g
+            g.Parent = PlayerGui
+            UiMouse.modal = g
+            -- Cliques/scroll não chegam ao jogo (sem tiro ao clicar no menu).
+            ContextActionService:BindActionAtPriority(ACTION_SINK, sink, false, Enum.ContextActionPriority.High.Value + 1000,
+                Enum.UserInputType.MouseButton1, Enum.UserInputType.MouseButton2, Enum.UserInputType.MouseWheel)
+            -- Reaplica todo frame depois do script de câmera, que força LockCenter em primeira pessoa.
+            RunService:BindToRenderStep(STEP_NAME, Enum.RenderPriority.Last.Value, function()
+                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+                UserInputService.MouseIconEnabled = true
+            end)
+        else
+            pcall(function() RunService:UnbindFromRenderStep(STEP_NAME) end)
+            pcall(function() ContextActionService:UnbindAction(ACTION_SINK) end)
+            if UiMouse.modal then UiMouse.modal:Destroy(); UiMouse.modal = nil end
+            local sv = UiMouse.saved; UiMouse.saved = nil
+            if sv then
+                UserInputService.MouseIconEnabled = sv.icon
+                UserInputService.MouseBehavior = sv.behavior
+            end
+        end
+    end
+end
+Conns[#Conns + 1] = GUI:GetPropertyChangedSignal("Enabled"):Connect(function() UiMouse.setOpen(GUI.Enabled) end)
 
 local Main = new("Frame", {Size = UDim2.fromOffset(820, 580), Position = UDim2.new(0.5, -410, 0.5, -290), BackgroundColor3 = Theme.bg, Active = true}, GUI)
 corner(Main, 12); outline(Main, 2, Theme.accent)
@@ -1521,6 +1563,7 @@ local function cleanup()
     Silent.alive = false; Silent.target = nil
     pcall(function() RunService:UnbindFromRenderStep("DrxMain") end)
     for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end
+    UiMouse.setOpen(false)
     stopFly(); restoreWeapon()
     for k, e in pairs(ESP) do destroyESP(e); ESP[k] = nil end
     if HB.tp then pcall(function() LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end) end
@@ -1529,6 +1572,7 @@ end
 shared.DrxCleanup = cleanup
 GUI.Destroying:Connect(cleanup)
 
+UiMouse.setOpen(GUI.Enabled) -- o menu nasce aberto
 Booted = true
-print(string.format("[Drx Hub V17] pronto | silent-hook=%s mousemoverel=%s mouse1click=%s | GameConfig.Build=%s",
+print(string.format("[Drx Hub V18] pronto | silent-hook=%s mousemoverel=%s mouse1click=%s | GameConfig.Build=%s",
     tostring(Silent.hooked), tostring(type(Cap.mousemoverel) == "function"), tostring(type(Cap.mouse1click) == "function"), GameConfig.Build))
