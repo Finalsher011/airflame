@@ -1,4 +1,4 @@
--- Sonic Hub V28 (Stable Architecture, Menu Keybind, 3D ESP Box Fix)
+-- Sonic Hub V29 (Ultimate Stable Fix)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -10,7 +10,6 @@ local VirtualUser = game:GetService("VirtualUser")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local Camera = Workspace.CurrentCamera
 
 -- LIMPEZA
 if shared.SonicHubCleanup then pcall(shared.SonicHubCleanup) end
@@ -61,13 +60,12 @@ local TitleBar = new("Frame", {Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 =
 corner(TitleBar, 12)
 new("Frame", {Size = UDim2.new(1, 0, 0, 15), Position = UDim2.new(0, 0, 1, -15), BackgroundColor3 = P.panelHead}, TitleBar)
 new("Frame", {Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1), BackgroundColor3 = P.accent}, TitleBar)
-label(TitleBar, {Size = UDim2.fromOffset(220, 50), Position = UDim2.fromOffset(20, 0), Text = "SONIC HUB V28", Font = P.fontBold, TextSize = 20, TextColor3 = P.accent})
+label(TitleBar, {Size = UDim2.fromOffset(220, 50), Position = UDim2.fromOffset(20, 0), Text = "SONIC HUB V29", Font = P.fontBold, TextSize = 20, TextColor3 = P.accent})
 
 local closeBtn = new("TextButton", {Size = UDim2.fromOffset(30, 30), Position = UDim2.new(1, -40, 0.5, -15), BackgroundColor3 = P.panel, Text = "x", Font = P.fontBold, TextSize = 16, TextColor3 = P.red, AutoButtonColor = false}, TitleBar)
 corner(closeBtn, 6)
 closeBtn.MouseButton1Click:Connect(function() GUI:Destroy() end)
 
--- BODY
 local Body = new("Frame", {Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 1, -50), BackgroundTransparency = 1}, Main)
 local Sidebar = new("Frame", {Position = UDim2.fromOffset(10, 10), Size = UDim2.fromOffset(170, 510), BackgroundColor3 = P.panel}, Body)
 corner(Sidebar, 8); outline(Sidebar, 1, P.stroke)
@@ -76,7 +74,6 @@ local NavList = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundT
 new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, NavList)
 new("UIPadding", {PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)}, NavList)
 
--- CONTAINER DE PÁGINAS (Mudei a arquitetura para não deletar os itens e bugar a tela)
 local PageContainer = new("Frame", {Position = UDim2.fromOffset(190, 10), Size = UDim2.fromOffset(580, 510), BackgroundTransparency = 1}, Body)
 
 -- WIDGETS
@@ -176,7 +173,7 @@ local function CreateKeybind(parent, name, key, defaultKey, defaultMode)
     label(row, {Size = UDim2.new(1, 0, 0, 18), Text = name, TextSize = 13})
     local container = new("Frame", {Size = UDim2.new(1, 0, 0, 24), Position = UDim2.fromOffset(0, 20), BackgroundColor3 = P.track}, row); corner(container, 6)
     
-    local btnKey = new("TextButton", {Size = UDim2.new(0.4, 0, 1, 0), BackgroundTransparency = 1, Text = tostring(get(key).Key), TextSize = 12, TextColor3 = P.text}, container)
+    local btnKey = new("TextButton", {Size = UDim2.new(0.4, 0, 1, 0), BackgroundTransparency = 1, Text = tostring(get(key).Key), TextSize = 12, TextColor3 = P.text, Font = P.fontBold}, container)
     local btnMode = new("TextButton", {Size = UDim2.new(0.6, -4, 1, 0), Position = UDim2.new(0.4, 4, 0, 0), BackgroundColor3 = P.panelHead, Text = tostring(get(key).Mode), TextSize = 12, TextColor3 = P.accent}, container); corner(btnMode, 6)
     
     btnMode.MouseButton1Click:Connect(function()
@@ -188,25 +185,28 @@ local function CreateKeybind(parent, name, key, defaultKey, defaultMode)
         btnMode.Text = nextMode
     end)
     
-    -- Sistema de Escuta de Tecla
     btnKey.MouseButton1Click:Connect(function()
         btnKey.Text = "..."
         local conn
         conn = UserInputService.InputBegan:Connect(function(input, processed)
             if processed then return end
-            if input.UserInputType == Enum.UserInputType.Keyboard then
-                set(key, {Key = input.KeyCode.Name, Mode = get(key).Mode})
-                btnKey.Text = input.KeyCode.Name
+            if input.UserInputType == Enum.UserInputType.Keyboard or input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
+                local keyName = input.KeyCode.Name
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then keyName = "LMB" end
+                if input.UserInputType == Enum.UserInputType.MouseButton2 then keyName = "RMB" end
+                
+                set(key, {Key = keyName, Mode = get(key).Mode})
+                btnKey.Text = keyName
                 conn:Disconnect()
             end
         end)
     end)
 end
 
--- GERENCIADOR DE PÁGINAS (Sistema de troca sem deletar)
+-- GERENCIADOR DE PÁGINAS
 local Pages, NavButtons, ActivePage = {}, {}, ""
 local function AddPage(name, sub, buildFunc)
-    local page = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 4, ScrollBarImageColor3 = P.accent, Visible = false}, PageContainer)
+    local page = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 4, ScrollBarImageColor3 = P.accent, Visible = false, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(0,0,0,0)}, PageContainer)
     new("UIListLayout", {Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder}, page)
     new("UIPadding", {PaddingRight = UDim.new(0, 12), PaddingBottom = UDim.new(0, 20)}, page)
     
@@ -242,7 +242,6 @@ local function AddNav(name)
     btn.MouseButton1Click:Connect(function() SwitchPage(name) end)
 end
 
--- CRIAÇÃO DAS ABAS (Tudo criado de uma vez)
 AddPage("Aimbot", "Camera & Mouse lock features", function(p)
     local g1 = CreateGroup(p, "Main Settings")
     CreateToggle(g1, "Enabled", "aim_on", false)
@@ -322,26 +321,30 @@ end)
 AddNav("Aimbot"); AddNav("Silent Aim"); AddNav("Trigger Bot"); AddNav("Visuals"); AddNav("Player"); AddNav("Misc")
 SwitchPage("Aimbot")
 
--- LÓGICA DO MENU KEYBIND
+-- MENU KEYBIND
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
     local mk = get("misc_menukey", {Key="RightShift", Mode="Toggle"})
-    if mk.Mode == "Toggle" and input.KeyCode.Name == mk.Key then
+    local isKeyMatch = (input.KeyCode.Name == mk.Key) or 
+                       (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or
+                       (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB")
+    if mk.Mode == "Toggle" and isKeyMatch then
         GUI.Enabled = not GUI.Enabled
-    elseif mk.Mode == "Hold" and input.KeyCode.Name == mk.Key then
+    elseif mk.Mode == "Hold" and isKeyMatch then
         GUI.Enabled = true
     end
 end)
 UserInputService.InputEnded:Connect(function(input)
     local mk = get("misc_menukey", {Key="RightShift", Mode="Toggle"})
-    if mk.Mode == "Hold" and input.KeyCode.Name == mk.Key then
+    local isKeyMatch = (input.KeyCode.Name == mk.Key) or 
+                       (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or
+                       (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB")
+    if mk.Mode == "Hold" and isKeyMatch then
         GUI.Enabled = false
     end
 end)
 
--- ==========================================
 -- LÓGICA DO CHEAT
--- ==========================================
 local function viewportMouse()
     local m = UserInputService:GetMouseLocation()
     local inset = Vector2.new(0, 36)
@@ -349,11 +352,20 @@ local function viewportMouse()
     return m - inset
 end
 
+-- CORREÇÃO CRÍTICA: Enum.KeyCode não tem RMB, por isso o script quebrava silenciosamente.
 local function isKeybindActive(keybindData)
     if not keybindData then return false end
     local mode, key = keybindData.Mode, keybindData.Key
-    local isDown = UserInputService:IsKeyDown(Enum.KeyCode[key]) or UserInputService:IsMouseButtonPressed(Enum.UserInputType[key])
+    local isDown = false
     
+    if key == "LMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+    elseif key == "RMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    elseif key == "MMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton3)
+    else
+        local kc = Enum.KeyCode[key]
+        if kc then isDown = UserInputService:IsKeyDown(kc) end
+    end
+
     if mode == "Always" then return true end
     if mode == "Hold" then return isDown end
     if mode == "Toggle" then
@@ -417,7 +429,6 @@ RunService.RenderStepped:Connect(function()
         local cam = Workspace.CurrentCamera
         if not cam then return end
         
-        -- FOV Circle
         if get("vis_fovcircle") and get("aim_on") then
             local fov = getNum("aim_fov", 120) * 2
             fovCircle.Position = UDim2.fromOffset(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
@@ -425,7 +436,6 @@ RunService.RenderStepped:Connect(function()
             fovCircle.Visible = true
         else fovCircle.Visible = false end
         
-        -- Aimbot
         if get("aim_on") and isKeybindActive(get("aim_keybind", {Key="RMB", Mode="Hold"})) then
             local target = findTarget(getNum("aim_fov", 120), get("aim_bone", "Head"), get("aim_team", true), get("aim_visible", false))
             if target then
@@ -442,7 +452,6 @@ RunService.RenderStepped:Connect(function()
             end
         end
 
-        -- Trigger Bot
         if get("trg_on") and isKeybindActive(get("trg_keybind", {Key="E", Mode="Toggle"})) then
             local target = findTarget(60, get("trg_zone", "Head"), true, false)
             if target and math.random(1,100) <= getNum("trg_hit", 100) then
@@ -490,7 +499,7 @@ pcall(function()
     silentOk = true
 end)
 
--- ESP REESCRITO (PROJEÇÃO MATEMÁTICA 3D -> 2D)
+-- ESP CORRIGIDO E 100% FUNCIONAL
 local ESP_ENTRIES = {}
 local BONES_R15 = {{"Head","UpperTorso"},{"UpperTorso","LowerTorso"},{"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},{"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},{"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},{"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"}}
 local BONES_R6 = {{"Head","Torso"},{"Torso","Left Arm"},{"Torso","Right Arm"},{"Torso","Left Leg"},{"Torso","Right Leg"}}
@@ -508,27 +517,29 @@ end
 local function hideESP(e)
     e.Box.Visible=false; e.Label.Visible=false; e.HealthBack.Visible=false; e.Tracer.Visible=false
     for _,b in ipairs(e.Bones) do b.Visible=false end
+    if e.Highlight then e.Highlight.Enabled = false end
 end
 local function destroyESP(e)
     e.Box:Destroy(); e.Label:Destroy(); e.HealthBack:Destroy(); e.Tracer:Destroy()
+    if e.Highlight then e.Highlight:Destroy() end
     for _,b in ipairs(e.Bones) do b:Destroy() end
 end
 
--- Desenha um quadrado perfeito na tela a partir da BoundingBox 3D
-local function get2DBoxFrom3D(cam, cf, size)
-    local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
-    local onScreen = false
-    for ix = -1, 1, 2 do for iy = -1, 1, 2 do for iz = -1, 1, 2 do
-        local pos = cf:PointToWorldSpace(Vector3.new(ix * size.X / 2, iy * size.Y / 2, iz * size.Z / 2))
-        local sp = cam:WorldToViewportPoint(pos)
-        if sp.Z > 0 then
-            onScreen = true
-            minX = math.min(minX, sp.X); maxX = math.max(maxX, sp.X)
-            minY = math.min(minY, sp.Y); maxY = math.max(maxY, sp.Y)
-        end
-    end end end
-    if not onScreen then return nil end
-    return Vector2.new(minX, minY), Vector2.new(maxX, maxY)
+-- Cálculo de projeção ultra-seguro (Cabeça ao HRP)
+local function get2DBoxFromChar(cam, char)
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local head = char:FindFirstChild("Head") or char:FindFirstChild("UpperTorso") or hrp
+    if not hrp or not head then return nil end
+    local topPos = head.Position + Vector3.new(0, 0.5, 0)
+    local botPos = hrp.Position - Vector3.new(0, 3, 0)
+    local spTop, onTop = cam:WorldToViewportPoint(topPos)
+    local spBot, onBot = cam:WorldToViewportPoint(botPos)
+    if onTop and onBot then
+        local h = spBot.Y - spTop.Y
+        local w = h * 0.6
+        return Vector2.new(spTop.X - w/2, spTop.Y), Vector2.new(spTop.X + w/2, spBot.Y)
+    end
+    return nil
 end
 
 RunService.RenderStepped:Connect(function()
@@ -552,9 +563,7 @@ RunService.RenderStepped:Connect(function()
                         seen[char] = true
                         local e = ESP_ENTRIES[char] or createESP(); ESP_ENTRIES[char] = e
                         
-                        local cf, size = char:GetBoundingBox()
-                        local tl, br = get2DBoxFrom3D(cam, cf, size)
-                        
+                        local tl, br = get2DBoxFromChar(cam, char)
                         if tl and br then
                             local w, h = br.X - tl.X, br.Y - tl.Y
                             
@@ -643,6 +652,8 @@ RunService.Stepped:Connect(function()
         if get("plr_infjump") and UserInputService:IsKeyDown(Enum.KeyCode.Space) then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
         if get("plr_noclip") then for _, v in ipairs(char:GetDescendants()) do if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end end end
         
+        if flyBodyVel and flyBodyVel.Parent ~= hrp then flyBodyVel:Destroy(); flyBodyVel = nil; flyBodyGyro:Destroy(); flyBodyGyro = nil end
+        
         if get("plr_fly") then
             if not flyBodyVel then
                 flyBodyVel = Instance.new("BodyVelocity", hrp); flyBodyVel.MaxForce = Vector3.new(1e5, 1e5, 1e5); flyBodyVel.Velocity = Vector3.zero
@@ -670,7 +681,12 @@ RunService.Stepped:Connect(function()
 end)
 
 LocalPlayer.Idled:Connect(function()
-    if get("misc_afk", true) then VirtualUser:CaptureController(); VirtualUser:ClickButton2(Vector2.new()) end
+    if get("misc_afk", true) then 
+        VirtualUser:CaptureController()
+        VirtualUser:Button2Down(Vector2.new(0,0))
+        task.wait(0.1)
+        VirtualUser:Button2Up(Vector2.new(0,0))
+    end
 end)
 
 -- ARRASTAR E SLIDER
@@ -706,4 +722,4 @@ shared.SonicHubCleanup = cleanup
 GUI.Destroying:Connect(cleanup)
 
 GUI.Enabled = true
-print("[Sonic Hub V28] Arquitetura estável carregada. Hook:", silentOk and "OK" or "OFF")
+print("[Sonic Hub V29] Totalmente corrigido. Hook:", silentOk and "OK" or "OFF")
