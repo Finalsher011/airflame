@@ -1,4 +1,4 @@
--- DRX HUB - Ultimate Fix (UILayout removed, UI 100% funcional)
+-- DRX HUB - Total Fix (Lag Removido, UI 100% Estável)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -50,7 +50,7 @@ local function tween(i, p) TweenService:Create(i, TWEEN, p):Play() end
 local GUI = new("ScreenGui", {Name = "DrxHub", ResetOnSpawn = false, DisplayOrder = 100, ZIndexBehavior = Enum.ZIndexBehavior.Global, Enabled = true}, PlayerGui)
 local Overlay = new("ScreenGui", {Name = "DrxOverlay", ResetOnSpawn = false, DisplayOrder = 999, IgnoreGuiInset = true}, PlayerGui)
 
-local Main = new("Frame", {Size = UDim2.fromOffset(820, 580), Position = UDim2.new(0.5, -410, 0.5, -290), BackgroundColor3 = Theme.bg, ClipsDescendants = true}, GUI)
+local Main = new("Frame", {Size = UDim2.fromOffset(820, 580), Position = UDim2.new(0.5, -410, 0.5, -290), BackgroundColor3 = Theme.bg}, GUI)
 corner(Main, 12); outline(Main, 2, Theme.accent)
 
 local TopBar = new("Frame", {Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 = Theme.panel}, Main)
@@ -68,7 +68,7 @@ closeBtn.MouseButton1Click:Connect(function() GUI:Destroy() end)
 
 local Body = new("Frame", {Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 1, -50), BackgroundTransparency = 1}, Main)
 
-local Sidebar = new("Frame", {Position = UDim2.fromOffset(15, 15), Size = UDim2.fromOffset(170, 495), BackgroundColor3 = Theme.panel, ClipsDescendants = true}, Body)
+local Sidebar = new("Frame", {Position = UDim2.fromOffset(15, 15), Size = UDim2.fromOffset(170, 495), BackgroundColor3 = Theme.panel}, Body)
 corner(Sidebar, 10); outline(Sidebar, 1, Theme.stroke)
 local NavList = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 0}, Sidebar)
 new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, NavList)
@@ -80,19 +80,16 @@ local PageContainer = new("Frame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTran
 local renderers = {}
 local activeSlider = nil
 
--- NOTIFICAÇÃO
+-- NOTIFICAÇÃO OTIMIZADA
 local function Notify(text, isOn)
     local notif = new("Frame", {Size = UDim2.fromOffset(220, 40), Position = UDim2.new(0.5, -110, 1, 20), BackgroundColor3 = Theme.card, ZIndex = 9999}, GUI)
     corner(notif, 8); outline(notif, 1.5, isOn and Theme.accent or Theme.stroke)
-    
     local bar = new("Frame", {Size = UDim2.fromOffset(3, 24), Position = UDim2.fromOffset(10, 8), BackgroundColor3 = isOn and Theme.accent or Theme.sub}, notif)
     corner(bar, 1.5)
-    
     label(notif, {Size = UDim2.new(1, -30, 0, 16), Position = UDim2.fromOffset(20, 5), Text = text, TextSize = 13, Font = Enum.Font.GothamBold}, nil)
-    label(notif, {Size = UDim2.new(1, -30, 0, 14), Position = UDim2.fromOffset(20, 21), Text = isOn and "Enabled" or "Disabled", TextSize = 11, TextColor3 = isOn and Theme.accent or Theme.sub}, nil)
     
     tween(notif, {Position = UDim2.new(0.5, -110, 1, -80)})
-    task.delay(2.5, function()
+    task.delay(2, function()
         if notif and notif.Parent then
             tween(notif, {Position = UDim2.new(0.5, -110, 1, 20), BackgroundTransparency = 1})
             task.delay(0.3, function() if notif then notif:Destroy() end end)
@@ -100,11 +97,10 @@ local function Notify(text, isOn)
     end)
 end
 
--- COMPONENTES UI
+-- COMPONENTES UI OTIMIZADOS (SEM LAG)
 local function CreateGroup(parent, title)
     local g = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1}, parent)
     new("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, g)
-    
     local head = new("Frame", {Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1, LayoutOrder = 1}, g)
     local line = new("Frame", {Size = UDim2.fromOffset(3, 14), Position = UDim2.fromOffset(0, 3), BackgroundColor3 = Theme.accent}, head); corner(line, 1)
     label(head, {Size = UDim2.new(1, -10, 1, 0), Position = UDim2.fromOffset(10, 0), Text = title, Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = Theme.accent}, nil)
@@ -124,15 +120,14 @@ local function CreateToggle(parent, name, key, default)
     corner(sw, 10)
     local knob = new("Frame", {Size = UDim2.fromOffset(14, 14), Position = UDim2.fromOffset(3, 3), BackgroundColor3 = Theme.sub}, sw); corner(knob, 7)
     
-    local function render(noNotify)
+    local function render()
         local on = get(key)
         tween(sw, {BackgroundColor3 = on and Theme.accent or Theme.track})
         tween(knob, {Position = on and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3), BackgroundColor3 = on and Theme.text or Theme.sub})
-        if not noNotify then Notify(name, on) end
     end
     renderers[key] = render
-    sw.MouseButton1Click:Connect(function() set(key, not get(key)); render() end)
-    render(true)
+    sw.MouseButton1Click:Connect(function() set(key, not get(key)); render() end) -- Notify removido aqui para evitar lag
+    render()
 end
 
 local function CreateSlider(parent, name, key, min, max, default)
@@ -153,7 +148,9 @@ local function CreateSlider(parent, name, key, min, max, default)
     local function update(pct)
         local v = math.floor(min + pct * (max - min) + 0.5)
         set(key, v); pct = (v - min) / math.max(max - min, 1)
-        tween(fill, {Size = UDim2.new(pct, 0, 1, 0)}); tween(knob, {Position = UDim2.new(pct, 0, 0.5, 0)})
+        -- Sem TweenService! Atualização direta impede o lag de 60fps
+        fill.Size = UDim2.new(pct, 0, 1, 0)
+        knob.Position = UDim2.new(pct, 0, 0.5, 0)
         valLbl.Text = tostring(v)
     end
     renderers[key] = function() update((getNum(key, default) - min) / math.max(max - min, 1)) end
@@ -161,7 +158,9 @@ local function CreateSlider(parent, name, key, min, max, default)
     btn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             activeSlider = {btn = btn, update = update, track = track}
-            update(math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1))
+            if track.AbsoluteSize.X > 0 then
+                update(math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1))
+            end
         end
     end)
     minus.MouseButton1Click:Connect(function() update(math.clamp((getNum(key) - 1 - min) / math.max(max - min, 1), 0, 1)) end)
@@ -188,7 +187,6 @@ local function CreateDropdown(parent, name, key, options, default)
         b.MouseButton1Click:Connect(function()
             set(key, opt); txt.Text = opt; list.Visible = false
             if renderers[key] then renderers[key]() end
-            Notify(name, true)
         end)
     end
     btn.MouseButton1Click:Connect(function() list.Visible = not list.Visible end)
@@ -211,7 +209,6 @@ local function CreateKeybind(parent, name, key, defaultKey, defaultMode)
         local curr = get(key).Mode; local nextMode = modes[1]
         for i, m in ipairs(modes) do if m == curr then nextMode = modes[(i % #modes) + 1] break end end
         set(key, {Key = get(key).Key, Mode = nextMode}); btnMode.Text = nextMode
-        Notify(name .. " Mode", true)
     end)
     
     btnKey.MouseButton1Click:Connect(function()
@@ -226,19 +223,17 @@ local function CreateKeybind(parent, name, key, defaultKey, defaultMode)
             
             if kName then
                 set(key, {Key = kName, Mode = get(key).Mode}); btnKey.Text = kName; conn:Disconnect()
-                Notify(name .. " Bind", true)
+                Notify("Tecla Definida", true)
             end
         end)
     end)
 end
 
--- CRIAÇÃO DAS PÁGINAS (CORRIGIDO)
 local Pages, NavButtons = {}, {}
 
 local function AddPage(name, buildFunc)
-    local page = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 4, ScrollBarImageColor3 = Theme.accent, Visible = false, AutomaticCanvasSize = Enum.AutomaticSize.Y}, PageContainer)
+    local page = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 4, ScrollBarImageColor3 = Theme.accent, Visible = false, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(0,0,0,0)}, PageContainer)
     
-    -- AQUI ESTAVA O ERRO! A linha "new("UILayout")" foi DELETADA.
     local grid = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1}, page)
     new("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 15), SortOrder = Enum.SortOrder.LayoutOrder}, grid)
     
@@ -253,6 +248,7 @@ local function AddPage(name, buildFunc)
 end
 
 local function SwitchPage(name)
+    activeSlider = nil -- Previne travamento se trocar de aba arrastando o slider
     for n, p in pairs(Pages) do p.Visible = (n == name) end
     for n, b in pairs(NavButtons) do
         local sel = (n == name)
@@ -328,7 +324,6 @@ AddPage("Misc", function(c1, c2)
     CreateSlider(g2, "ThirdPerson Distance", "cam_dist", 5, 50, 12)
 end)
 
--- As abas abaixo estavam faltando e por isso davam erro ao passar o mouse
 AddPage("Inventory Changer", function(c1, c2)
     local g1 = CreateGroup(c1, "Skins")
     label(g1, {Size = UDim2.new(1, 0, 0, 20), Text = "Em breve...", TextSize = 14, TextColor3 = Theme.sub}, nil)
@@ -407,7 +402,6 @@ local function isKeybindActive(data)
         local sk = "tgl_" .. tostring(data.Key)
         if isDown and not Prefs[sk .. "_prev"] then 
             Prefs[sk] = not Prefs[sk] 
-            Notify("Toggle: " .. data.Key, Prefs[sk])
         end
         Prefs[sk .. "_prev"] = isDown
         return Prefs[sk]
@@ -643,7 +637,6 @@ UserInputService.InputBegan:Connect(function(input, processed)
                   (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB")
     if mk.Mode == "Toggle" and match then 
         GUI.Enabled = not GUI.Enabled
-        Notify("Drx Hub", GUI.Enabled)
     elseif mk.Mode == "Hold" and match then GUI.Enabled = true end
 end)
 
@@ -667,12 +660,19 @@ UserInputService.InputChanged:Connect(function(input)
         Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset+d.X, startPos.Y.Scale, startPos.Y.Offset+d.Y)
     end
     if activeSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local pct = math.clamp((input.Position.X - activeSlider.track.AbsolutePosition.X) / activeSlider.track.AbsoluteSize.X, 0, 1)
-        activeSlider.update(pct)
+        if activeSlider.track and activeSlider.track.Parent then
+            local pct = math.clamp((input.Position.X - activeSlider.track.AbsolutePosition.X) / math.max(activeSlider.track.AbsoluteSize.X, 1), 0, 1)
+            activeSlider.update(pct)
+        else
+            activeSlider = nil
+        end
     end
 end)
 UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false; activeSlider = nil end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
+        dragging = false
+        activeSlider = nil 
+    end
 end)
 
 local cleaned = false
@@ -685,4 +685,4 @@ end
 shared.DrxCleanup = cleanup
 GUI.Destroying:Connect(cleanup)
 
-print("[Drx Hub] Carregado com sucesso. Erro da UILayout removido.")
+print("[Drx Hub] Carregado com sucesso. Otimizado contra travamentos.")
