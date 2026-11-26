@@ -1,4 +1,4 @@
--- Sonic Hub V32 (Reforma Total: Tudo Funcional)
+-- Sonic Hub V33 (Correção de Inputs, Noclip e Câmera)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -10,7 +10,6 @@ local VirtualUser = game:GetService("VirtualUser")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local Camera = Workspace.CurrentCamera
 
 if shared.SonicHubCleanup then pcall(shared.SonicHubCleanup) end
 for _, name in ipairs({"SonicHub", "SonicHubOverlay"}) do
@@ -24,23 +23,16 @@ local function get(k, d) local v = Prefs[k]; if v == nil then return d end; retu
 local function getNum(k, d) local v = tonumber(get(k, d)); if not v or v ~= v then return d end; return v end
 
 -- ============================================================
--- SISTEMA DE CORES (THEME)
+-- SISTEMA DE CORES
 -- ============================================================
 local Theme = {
-    bg = Color3.fromRGB(15, 15, 20),
-    panel = Color3.fromRGB(25, 25, 35),
-    text = Color3.fromRGB(255, 255, 255),
-    sub = Color3.fromRGB(150, 150, 160),
-    accent = Color3.fromRGB(180, 255, 0),
-    stroke = Color3.fromRGB(50, 50, 65),
+    bg = Color3.fromRGB(15, 15, 20), panel = Color3.fromRGB(25, 25, 35), text = Color3.fromRGB(255, 255, 255),
+    sub = Color3.fromRGB(150, 150, 160), accent = Color3.fromRGB(180, 255, 0), stroke = Color3.fromRGB(50, 50, 65),
     track = Color3.fromRGB(40, 40, 50),
 }
 
 local ThemeElements = {}
-local function regTheme(inst, type)
-    table.insert(ThemeElements, {inst = inst, type = type})
-end
-
+local function regTheme(inst, type) table.insert(ThemeElements, {inst = inst, type = type}) end
 local function UpdateUITheme()
     for _, data in ipairs(ThemeElements) do
         local inst, t = data.inst, data.type
@@ -54,8 +46,7 @@ local function UpdateUITheme()
                 elseif inst:IsA("UIStroke") then inst.Color = Theme.accent
                 else inst.BackgroundColor3 = Theme.accent end
             elseif t == "stroke" then inst.Color = Theme.stroke
-            elseif t == "track" then inst.BackgroundColor3 = Theme.track
-            end
+            elseif t == "track" then inst.BackgroundColor3 = Theme.track end
         end
     end
 end
@@ -95,7 +86,7 @@ local TitleBar = new("Frame", {Size = UDim2.new(1, 0, 0, 60), BackgroundColor3 =
 corner(TitleBar, 12)
 new("Frame", {Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 1, -20), BackgroundColor3 = Theme.panel}, TitleBar, "panel")
 new("Frame", {Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = Theme.accent}, TitleBar, "accent")
-label(TitleBar, {Size = UDim2.fromOffset(300, 60), Position = UDim2.fromOffset(20, 0), Text = "SONIC HUB V32", Font = Enum.Font.GothamBlack, TextSize = 26}, "text")
+label(TitleBar, {Size = UDim2.fromOffset(300, 60), Position = UDim2.fromOffset(20, 0), Text = "SONIC HUB V33", Font = Enum.Font.GothamBlack, TextSize = 26}, "text")
 
 local closeBtn = new("TextButton", {Size = UDim2.fromOffset(36, 36), Position = UDim2.new(1, -46, 0.5, -18), BackgroundColor3 = Theme.accent, Text = "X", Font = Enum.Font.GothamBlack, TextSize = 18, TextColor3 = Color3.new(1,1,1), AutoButtonColor = false}, TitleBar, "accent")
 corner(closeBtn, 8)
@@ -234,9 +225,6 @@ local function CreateKeybind(parent, name, key, defaultKey, defaultMode)
     end)
 end
 
--- ============================================================
--- PÁGINAS
--- ============================================================
 local Pages, NavButtons = {}, {}
 local function AddPage(name, sub, buildFunc)
     local page = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 4, Visible = false, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(0,0,0,0)}, PageContainer)
@@ -275,7 +263,6 @@ AddPage("Settings", "Mude as cores e o visual", function(p)
     CreateSlider(g1, "Fundo (R)", "color_bg_r", 0, 255, 15)
     CreateSlider(g1, "Fundo (G)", "color_bg_g", 0, 255, 15)
     CreateSlider(g1, "Fundo (B)", "color_bg_b", 0, 255, 20)
-    
     local g2 = CreateGroup(p, "Cores de Destaque")
     CreateSlider(g2, "Destaque (R)", "color_ac_r", 0, 255, 180)
     CreateSlider(g2, "Destaque (G)", "color_ac_g", 0, 255, 255)
@@ -287,7 +274,6 @@ AddPage("Settings", "Mude as cores e o visual", function(p)
         Theme.bg = Color3.fromRGB(getNum("color_bg_r", 15), getNum("color_bg_g", 15), getNum("color_bg_b", 20))
         Theme.panel = Theme.bg:Lerp(Color3.new(1,1,1), 0.05)
         Theme.accent = Color3.fromRGB(getNum("color_ac_r", 180), getNum("color_ac_g", 255), getNum("color_ac_b", 0))
-        
         if (Theme.bg.R + Theme.bg.G + Theme.bg.B) / 3 < 128 then
             Theme.text = Color3.new(1,1,1); Theme.sub = Color3.fromRGB(180,180,180)
             Theme.stroke = Color3.fromRGB(80,80,80); Theme.track = Color3.fromRGB(50,50,50)
@@ -375,7 +361,7 @@ AddNav("Aimbot"); AddNav("Silent Aim"); AddNav("Trigger Bot"); AddNav("Visuals")
 SwitchPage("Aimbot")
 
 -- ============================================================
--- LÓGICA PRINCIPAL
+-- LÓGICA PRINCIPAL (Corrigida)
 -- ============================================================
 local function viewportMouse()
     local m = UserInputService:GetMouseLocation()
@@ -390,7 +376,10 @@ local function isKeybindActive(data)
     if data.Key == "LMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
     elseif data.Key == "RMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
     elseif data.Key == "MMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton3)
-    else local kc = Enum.KeyCode[data.Key]; if kc then isDown = UserInputService:IsKeyDown(kc) end end
+    else 
+        local kc = Enum.KeyCode[data.Key]
+        if kc then isDown = UserInputService:IsKeyDown(kc) end 
+    end
 
     if data.Mode == "Always" then return true end
     if data.Mode == "Hold" then return isDown end
@@ -413,7 +402,7 @@ local function isVisible(char, part)
 end
 
 local function findTarget(fov, bone, teamCheck, visCheck)
-    local cam = Workspace.CurrentCamera
+    local cam = Workspace.CurrentCamera -- CORREÇÃO CRÍTICA: Pega a câmera atualizada
     if not cam then return nil end
     local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
     local closest, closestDist = nil, math.huge
@@ -476,16 +465,15 @@ RunService.RenderStepped:Connect(function()
             if (os.clock() - (Prefs["trg_lastfire"] or 0)) > (getNum("trg_delay", 10) / 1000) then
                 Prefs["trg_lastfire"] = os.clock()
                 pcall(function()
-                    local g = getgenv()
-                    if type(g) == "table" and type(g.mouse1click) == "function" then g.mouse1click()
-                    else VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new()) end
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton1(Vector2.new(0,0))
                 end)
             end
         end
     end
 end)
 
--- Silent Aim (Hook Seguro)
+-- Silent Aim
 local silentPart = nil
 RunService.RenderStepped:Connect(function()
     if not get("sil_on") or not isKeybindActive(get("sil_keybind", {Key="Always", Mode="Always"})) then silentPart = nil; return end
@@ -512,7 +500,7 @@ pcall(function()
     end)
 end)
 
--- ESP (Matemática Direta Corrigida)
+-- ESP
 local ESP = {}
 local BONES = {{"Head","UpperTorso"},{"UpperTorso","LowerTorso"},{"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"}}
 
@@ -530,7 +518,7 @@ RunService.RenderStepped:Connect(function()
         return
     end
     
-    local cam = Workspace.CurrentCamera
+    local cam = Workspace.CurrentCamera -- CORREÇÃO CRÍTICA AQUI TAMBÉM
     if not cam then return end
     local seen = {}
     
@@ -627,8 +615,10 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- PLAYER MODS
+-- PLAYER MODS (Noclip Corrigido)
 local flyBodyVel, flyBodyGyro = nil, nil
+local noclipActive = false
+
 RunService.Stepped:Connect(function()
     local char = LocalPlayer.Character
     if not char then return end
@@ -640,7 +630,26 @@ RunService.Stepped:Connect(function()
     hum.JumpPower = getNum("plr_jump", 50)
     
     if get("plr_infjump") and UserInputService:IsKeyDown(Enum.KeyCode.Space) then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-    if get("plr_noclip") then for _, v in ipairs(char:GetDescendants()) do if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end end end
+    
+    -- SISTEMA NOCLIP CORRIGIDO
+    if get("plr_noclip") then
+        for _, v in ipairs(char:GetDescendants()) do 
+            if v:IsA("BasePart") and v.CanCollide then 
+                v.CanCollide = false 
+            end 
+        end
+        noclipActive = true
+    else
+        if noclipActive then
+            -- Devolve a colisão ao desligar
+            for _, v in ipairs(char:GetDescendants()) do 
+                if v:IsA("BasePart") then 
+                    v.CanCollide = true 
+                end 
+            end
+            noclipActive = false
+        end
+    end
     
     if get("plr_fly") then
         if not flyBodyVel or flyBodyVel.Parent ~= hrp then
@@ -690,17 +699,36 @@ LocalPlayer.Idled:Connect(function()
     if get("misc_afk", true) then VirtualUser:CaptureController(); VirtualUser:ClickButton2(Vector2.new()) end
 end)
 
--- INPUT (Menu Toggle & Drag)
+-- INPUT (Correção do erro do Keycode)
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
     local mk = get("misc_menukey", {Key="RightShift", Mode="Toggle"})
-    local match = (input.KeyCode.Name == mk.Key) or (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB")
+    local match = false
+    
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        match = (input.KeyCode.Name == mk.Key)
+    elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+        match = (mk.Key == "LMB")
+    elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+        match = (mk.Key == "RMB")
+    end
+
     if mk.Mode == "Toggle" and match then GUI.Enabled = not GUI.Enabled
     elseif mk.Mode == "Hold" and match then GUI.Enabled = true end
 end)
+
 UserInputService.InputEnded:Connect(function(input)
     local mk = get("misc_menukey", {Key="RightShift", Mode="Toggle"})
-    local match = (input.KeyCode.Name == mk.Key) or (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB")
+    local match = false
+    
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        match = (input.KeyCode.Name == mk.Key)
+    elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+        match = (mk.Key == "LMB")
+    elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+        match = (mk.Key == "RMB")
+    end
+
     if mk.Mode == "Hold" and match then GUI.Enabled = false end
 end)
 
