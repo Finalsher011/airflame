@@ -1,12 +1,15 @@
--- Drx Hub V6 (Apenas a Interface - Zero Erros)
+-- Drx Hub V7 (Apenas Task.Wait - 100% Livre do Erro RenderStep)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser")
 local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
--- Limpeza
+if shared.DrxCleanup then pcall(shared.DrxCleanup) end
 for _, name in ipairs({"DrxHub", "DrxOverlay"}) do
     local a = PlayerGui:FindFirstChild(name); if a then a:Destroy() end
+    local b = game:GetService("CoreGui"):FindFirstChild(name); if b then b:Destroy() end
 end
 
 local Prefs = {}
@@ -14,7 +17,6 @@ local function set(k, v) Prefs[k] = v end
 local function get(k, d) local v = Prefs[k]; if v == nil then return d end; return v end
 local function getNum(k, d) local v = tonumber(get(k, d)); if not v or v ~= v then return d end; return v end
 
--- TEMA
 local Theme = {
     bg = Color3.fromRGB(18, 12, 14), panel = Color3.fromRGB(28, 18, 22), card = Color3.fromRGB(38, 24, 30),
     text = Color3.fromRGB(255, 255, 255), sub = Color3.fromRGB(150, 130, 140), accent = Color3.fromRGB(255, 40, 60),
@@ -36,7 +38,9 @@ local TWEEN = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Ou
 local function tween(i, p) TweenService:Create(i, TWEEN, p):Play() end
 
 local GUI = new("ScreenGui", {Name = "DrxHub", ResetOnSpawn = false, DisplayOrder = 100, ZIndexBehavior = Enum.ZIndexBehavior.Global, Enabled = true}, PlayerGui)
-local Main = new("Frame", {Size = UDim2.fromOffset(820, 580), Position = UDim2.new(0.5, -410, 0.5, -290), BackgroundColor3 = Theme.bg}, GUI)
+local Overlay = new("ScreenGui", {Name = "DrxOverlay", ResetOnSpawn = false, DisplayOrder = 999, IgnoreGuiInset = true}, PlayerGui)
+
+local Main = new("Frame", {Size = UDim2.fromOffset(820, 580), Position = UDim2.new(0.5, -410, 0.5, -290), BackgroundColor3 = Theme.bg, ClipsDescendants = true}, GUI)
 corner(Main, 12); outline(Main, 2, Theme.accent)
 
 local TopBar = new("Frame", {Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 = Theme.panel}, Main)
@@ -203,7 +207,6 @@ local function AddNav(name)
     btn.MouseButton1Click:Connect(function() SwitchPage(name) end)
 end
 
--- CONSTRUÇÃO DAS PÁGINAS
 AddPage("Rage", function(c1, c2)
     local g1 = CreateGroup(c1, "Ragebot")
     CreateToggle(g1, "Ragebot", "rage_on", false)
@@ -293,14 +296,227 @@ end)
 AddNav("Rage"); AddNav("Legit"); AddNav("Misc"); AddNav("Inventory Changer"); AddNav("Visuals"); AddNav("World"); AddNav("Settings")
 SwitchPage("Rage")
 
--- INPUTS BÁSICOS
+local function isKeybindActive(data)
+    if not data or type(data.Key) ~= "string" or data.Key == "None" then return false end
+    if data.Mode == "Always" then return true end
+    local isDown = false
+    if data.Key == "LMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+    elseif data.Key == "RMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    elseif data.Key == "MMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton3)
+    else local success, kc = pcall(function() return Enum.KeyCode[data.Key] end); if success and kc then isDown = UserInputService:IsKeyDown(kc) end end
+    if data.Mode == "Hold" then return isDown end
+    if data.Mode == "Toggle" then
+        local sk = "tgl_" .. tostring(data.Key)
+        if isDown and not Prefs[sk .. "_prev"] then Prefs[sk] = not Prefs[sk] end
+        Prefs[sk .. "_prev"] = isDown
+        return Prefs[sk]
+    end
+    return false
+end
+
+local function isVisible(char, part)
+    local cam = Workspace.CurrentCamera
+    if not cam or not Players.LocalPlayer.Character then return false end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {Players.LocalPlayer.Character, char}
+    return Workspace:Raycast(cam.CFrame.Position, part.Position - cam.CFrame.Position, params) == nil
+end
+
+local function findTarget(fov, bone, teamCheck, visCheck)
+    local cam = Workspace.CurrentCamera
+    if not cam then return nil end
+    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+    local closest, closestDist = nil, math.huge
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= Players.LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
+            if not teamCheck or plr.Team ~= Players.LocalPlayer.Team then
+                local part = plr.Character:FindFirstChild(bone) or plr.Character.HumanoidRootPart
+                local sp, onScreen = cam:WorldToViewportPoint(part.Position)
+                if onScreen then
+                    local dist = (Vector2.new(sp.X, sp.Y) - center).Magnitude
+                    if dist < fov and dist < closestDist then
+                        if not visCheck or isVisible(plr.Character, part) then
+                            closestDist = dist; closest = {char = plr.Character, part = part}
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local fovCircle = new("Frame", {Size = UDim2.fromOffset(100, 100), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, Visible = false}, Overlay)
+new("UICorner", {CornerRadius = UDim.new(1, 0)}, fovCircle)
+new("UIStroke", {Thickness = 1, Color = Theme.accent}, fovCircle)
+
+-- LOOP 1: AIMBOT E FOV (Task Spawn)
+task.spawn(function()
+    while task.wait(0.01) do
+        if not GUI.Parent then break end
+        pcall(function()
+            local cam = Workspace.CurrentCamera
+            if not cam then return end
+
+            local circleStroke = fovCircle:FindFirstChild("UIStroke")
+            if circleStroke then circleStroke.Color = Theme.accent end
+
+            if get("sil_fovcircle") and get("sil_on") then
+                fovCircle.Position = UDim2.fromOffset(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+                fovCircle.Size = UDim2.fromOffset(getNum("sil_fov", 120) * 2, getNum("sil_fov", 120) * 2); fovCircle.Visible = true
+            else fovCircle.Visible = false end
+
+            if get("rage_on") and isKeybindActive(get("rage_key", {Key="None"})) then
+                local target = findTarget(getNum("rage_fov", 120), "Head", get("rage_team", true), false)
+                if target and target.part and target.part.Parent then
+                    if cam.CameraType ~= Enum.CameraType.Scriptable and cam.CameraType ~= Enum.CameraType.Custom then
+                        cam.CameraType = Enum.CameraType.Custom
+                    end
+                    cam.CFrame = cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position, target.part.Position), 0.25)
+                end
+            end
+
+            if get("trg_on") and isKeybindActive(get("trg_key", {Key="None"})) then
+                local target = findTarget(60, "Head", get("trg_team", true), false)
+                if target then
+                    if (os.clock() - (Prefs["trg_lastfire"] or 0)) > (getNum("trg_delay", 50) / 1000) then
+                        Prefs["trg_lastfire"] = os.clock()
+                        task.spawn(function()
+                            pcall(function()
+                                local g = getgenv()
+                                if type(g) == "table" and type(g.mouse1click) == "function" then g.mouse1click()
+                                else VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new()) end
+                            end)
+                        end)
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+-- LOOP 2: SILENT AIM
+local silentPart = nil
+task.spawn(function()
+    while task.wait() do
+        if not GUI.Parent then break end
+        pcall(function()
+            if not get("sil_on") or not isKeybindActive(get("sil_key", {Key="None"})) then silentPart = nil; return end
+            local t = findTarget(getNum("sil_fov", 200), get("sil_bone", "Head"), get("sil_team", true), get("sil_vis", false))
+            silentPart = t and t.part or nil
+        end)
+    end
+end)
+
+pcall(function()
+    if type(hookmetamethod) ~= "function" then return end
+    local oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        if not checkcaller() and get("sil_on") and silentPart and silentPart.Parent then
+            local args = {...}
+            if method == "Raycast" and self == Workspace then
+                local origin = args[1]
+                if typeof(origin) == "Vector3" then args[2] = (silentPart.Position - origin).Unit * 1000; return oldNamecall(self, table.unpack(args)) end
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+end)
+
+-- LOOP 3: ESP
+local ESP = {}
+local BONES = {{"Head","UpperTorso"},{"UpperTorso","LowerTorso"},{"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"}}
+local function destroyESP(e)
+    if e.Box then e.Box:Destroy() end
+    if e.Label then e.Label:Destroy() end
+    if e.Highlight then e.Highlight:Destroy() end
+    if e.Bones then for _,b in pairs(e.Bones) do b:Destroy() end end
+end
+
+task.spawn(function()
+    while task.wait(0.03) do
+        if not GUI.Parent then break end
+        pcall(function()
+            if not get("esp_box") and not get("esp_name") and not get("esp_skel") and not get("hl_on") then
+                for k,e in pairs(ESP) do destroyESP(e); ESP[k] = nil end
+                return
+            end
+            local cam = Workspace.CurrentCamera
+            if not cam then return end
+            local seen = {}
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= Players.LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
+                    if not get("esp_team") or plr.Team ~= Players.LocalPlayer.Team then
+                        local char = plr.Character
+                        local hrp = char.HumanoidRootPart
+                        local dist = (hrp.Position - cam.CFrame.Position).Magnitude
+                        if dist <= 1000 then
+                            seen[char] = true
+                            local e = ESP[char]
+                            if not e then
+                                e = {Bones = {}}
+                                e.Box = new("Frame", {BackgroundTransparency = 1, Visible = false}, Overlay)
+                                e.Stroke = new("UIStroke", {Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Color = Theme.accent}, e.Box)
+                                e.Label = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.fromOffset(200,20), AnchorPoint = Vector2.new(0.5,1), Font = Enum.Font.Gotham, TextStrokeTransparency = 0.5, Visible = false, TextColor3 = Theme.accent}, Overlay)
+                                e.Highlight = Instance.new("Highlight", Overlay)
+                                ESP[char] = e
+                            end
+                            local sp, onScreen = cam:WorldToViewportPoint(hrp.Position)
+                            if onScreen then
+                                local h = math.abs(cam:WorldToViewportPoint(hrp.Position + Vector3.new(0,3,0)).Y - cam:WorldToViewportPoint(hrp.Position - Vector3.new(0,3,0)).Y)
+                                local w = h * 0.65
+                                local tlX, tlY = sp.X - w/2, sp.Y - h/2
+                                if get("esp_box") then e.Box.Position = UDim2.fromOffset(tlX, tlY); e.Box.Size = UDim2.fromOffset(w, h); e.Box.Visible = true
+                                else e.Box.Visible = false end
+                                if get("esp_name") then e.Label.Text = plr.Name; e.Label.Position = UDim2.fromOffset(sp.X, tlY - 4); e.Label.Visible = true
+                                else e.Label.Visible = false end
+                                if get("esp_skel") then
+                                    for i, pair in ipairs(BONES) do
+                                        local line = e.Bones[i]
+                                        if not line then line = new("Frame", {AnchorPoint = Vector2.new(0.5,0.5), Visible=false, BackgroundColor3 = Theme.accent}, Overlay); e.Bones[i] = line end
+                                        local a, b = char:FindFirstChild(pair[1]), char:FindFirstChild(pair[2])
+                                        if a and b then
+                                            local sa, oa = cam:WorldToViewportPoint(a.Position); local sb, ob = cam:WorldToViewportPoint(b.Position)
+                                            if oa and ob then
+                                                local d = Vector2.new(sb.X, sb.Y) - Vector2.new(sa.X, sa.Y)
+                                                line.Size = UDim2.fromOffset(d.Magnitude, 1)
+                                                line.Position = UDim2.fromOffset((sa.X+sb.X)/2, (sa.Y+sb.Y)/2)
+                                                line.Rotation = math.deg(math.atan2(d.Y, d.X)); line.Visible = true
+                                            else line.Visible = false end
+                                        else line.Visible = false end
+                                    end
+                                else for _,b in pairs(e.Bones) do b.Visible = false end end
+                            else
+                                e.Box.Visible = false; e.Label.Visible = false
+                                for _,b in pairs(e.Bones) do b.Visible = false end
+                            end
+                            if get("hl_on") then e.Highlight.Adornee = char; e.Highlight.FillColor = Theme.accent; e.Highlight.Enabled = true
+                            else e.Highlight.Enabled = false end
+                        else
+                            if e then e.Box.Visible = false; e.Label.Visible = false; e.Highlight.Enabled = false; for _,b in pairs(e.Bones) do b.Visible = false end end
+                        end
+                    end
+                end
+            end
+            for k,e in pairs(ESP) do if not seen[k] then destroyESP(e); ESP[k] = nil end end
+        end)
+    end
+end)
+
+-- INPUTS
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
     local mk = get("misc_menukey", {Key="RightShift", Mode="Toggle"})
-    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == mk.Key then
-        if mk.Mode == "Toggle" then GUI.Enabled = not GUI.Enabled
-        else GUI.Enabled = true end
-    end
+    local match = (input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == mk.Key) or (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB")
+    if mk.Mode == "Toggle" and match then GUI.Enabled = not GUI.Enabled
+    elseif mk.Mode == "Hold" and match then GUI.Enabled = true end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    local mk = get("misc_menukey", {Key="RightShift", Mode="Toggle"})
+    local match = (input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == mk.Key) or (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB")
+    if mk.Mode == "Hold" and match then GUI.Enabled = false end
 end)
 
 local dragging, dragStart, startPos = false, nil, nil
@@ -325,4 +541,14 @@ UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false; activeSlider = nil end
 end)
 
-print("[Drx Hub] Apenas a Interface carregada com sucesso. Nenhum loop rodando.")
+local cleaned = false
+local function cleanup()
+    if cleaned then return end; cleaned = true
+    if shared.DrxCleanup == cleanup then shared.DrxCleanup = nil end
+    for k,e in pairs(ESP) do destroyESP(e); ESP[k]=nil end
+    Overlay:Destroy(); if GUI.Parent then GUI:Destroy() end
+end
+shared.DrxCleanup = cleanup
+GUI.Destroying:Connect(cleanup)
+
+print("[Drx Hub] Carregado com sucesso. Sem RenderStepped.")
