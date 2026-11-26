@@ -1,15 +1,16 @@
--- Drx Hub V10 (Sem Hooks, Sem Erros de Câmera, 100% Task.Wait)
+-- Drx Hub V11 (Toggles, Sliders e ESP 100% Funcionais)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local VirtualUser = game:GetService("VirtualUser")
+local CoreGui = game:GetService("CoreGui")
 local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
 if shared.DrxCleanup then pcall(shared.DrxCleanup) end
 for _, name in ipairs({"DrxHub", "DrxOverlay"}) do
     local a = PlayerGui:FindFirstChild(name); if a then a:Destroy() end
-    local b = game:GetService("CoreGui"):FindFirstChild(name); if b then b:Destroy() end
+    local b = CoreGui:FindFirstChild(name); if b then b:Destroy() end
 end
 
 local Prefs = {}
@@ -37,10 +38,11 @@ end
 local TWEEN = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 local function tween(i, p) TweenService:Create(i, TWEEN, p):Play() end
 
+-- Active = true garante que o menu capture os cliques do mouse
 local GUI = new("ScreenGui", {Name = "DrxHub", ResetOnSpawn = false, DisplayOrder = 100, ZIndexBehavior = Enum.ZIndexBehavior.Global, Enabled = true}, PlayerGui)
-local Overlay = new("ScreenGui", {Name = "DrxOverlay", ResetOnSpawn = false, DisplayOrder = 999, IgnoreGuiInset = true}, PlayerGui)
+local Overlay = new("ScreenGui", {Name = "DrxOverlay", ResetOnSpawn = false, DisplayOrder = 999, IgnoreGuiInset = true}, CoreGui)
 
-local Main = new("Frame", {Size = UDim2.fromOffset(820, 580), Position = UDim2.new(0.5, -410, 0.5, -290), BackgroundColor3 = Theme.bg, ClipsDescendants = true}, GUI)
+local Main = new("Frame", {Size = UDim2.fromOffset(820, 580), Position = UDim2.new(0.5, -410, 0.5, -290), BackgroundColor3 = Theme.bg, Active = true}, GUI)
 corner(Main, 12); outline(Main, 2, Theme.accent)
 
 local TopBar = new("Frame", {Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 = Theme.panel}, Main)
@@ -207,50 +209,35 @@ local function AddNav(name)
     btn.MouseButton1Click:Connect(function() SwitchPage(name) end)
 end
 
+-- CONFIGURANDO KEYBINDS PADRÃO PARA "Always" (SEMPRE ATIVO SE O TOGGLE ESTIVER LIGADO)
 AddPage("Rage", function(c1, c2)
     local g1 = CreateGroup(c1, "Ragebot")
     CreateToggle(g1, "Ragebot", "rage_on", false)
-    CreateKeybind(g1, "Ragebot Key", "rage_key", "None", "Toggle")
-    CreateToggle(g1, "Wallbang", "rage_wall", false)
+    CreateKeybind(g1, "Ragebot Key", "rage_key", "Always", "Always")
     CreateSlider(g1, "FOV", "rage_fov", 10, 360, 120)
-    CreateSlider(g1, "FOV Size", "rage_fovsize", 10, 800, 720)
-    CreateKeybind(g1, "Auto Shoot", "rage_autoshoot", "None", "Hold")
     CreateToggle(g1, "Team Check", "rage_team", true)
     local g2 = CreateGroup(c2, "Weapon Mods")
     CreateToggle(g2, "Rapid Fire", "wpn_rapid", false)
     CreateToggle(g2, "No Recoil", "wpn_recoil", false)
     CreateToggle(g2, "No Spread", "wpn_spread", false)
-    CreateToggle(g2, "Instant Reload", "wpn_reload", false)
 end)
 
 AddPage("Legit", function(c1, c2)
-    local g1 = CreateGroup(c1, "Aimbot (Legit)")
+    local g1 = CreateGroup(c1, "Silent Aim")
     CreateToggle(g1, "Silent Aim", "sil_on", false)
-    CreateKeybind(g1, "Silent Key", "sil_key", "None", "Toggle")
-    CreateSlider(g1, "Smooth", "sil_smooth", 1, 20, 5)
+    CreateKeybind(g1, "Silent Key", "sil_key", "Always", "Always")
     CreateToggle(g1, "Visible Only", "sil_vis", false)
     CreateDropdown(g1, "Bone", "sil_bone", {"Head", "Torso", "Root"}, "Head")
-    CreateToggle(g1, "Team Check", "sil_team", true)
-    local g2 = CreateGroup(c2, "FOV")
+    local g2 = CreateGroup(c2, "FOV & Trigger")
     CreateSlider(g2, "FOV Size", "sil_fov", 10, 800, 120)
-    CreateToggle(g2, "FOV Circle", "sil_fovcircle", true)
-    local g3 = CreateGroup(c2, "Triggerbot")
-    CreateToggle(g3, "Triggerbot", "trg_on", false)
-    CreateKeybind(g3, "Trigger Key", "trg_key", "None", "Toggle")
-    CreateSlider(g3, "Trigger Delay (ms)", "trg_delay", 0, 500, 50)
-    CreateToggle(g3, "Team Check", "trg_team", true)
+    CreateToggle(g2, "Triggerbot", "trg_on", false)
+    CreateKeybind(g2, "Trigger Key", "trg_key", "Always", "Always")
+    CreateSlider(g2, "Trigger Delay", "trg_delay", 0, 500, 50)
 end)
 
 AddPage("Misc", function(c1, c2)
     local g1 = CreateGroup(c1, "Misc")
-    CreateToggle(g1, "Spectator list", "misc_spect", false)
-    CreateToggle(g1, "Anti Spectate", "misc_antispect", false)
     CreateToggle(g1, "Bhop", "misc_bhop", false)
-end)
-
-AddPage("Inventory Changer", function(c1, c2)
-    local g1 = CreateGroup(c1, "Skins")
-    label(g1, {Size = UDim2.new(1, 0, 0, 20), Text = "Em breve...", TextSize = 14, TextColor3 = Theme.sub}, nil)
 end)
 
 AddPage("Visuals", function(c1, c2)
@@ -258,36 +245,25 @@ AddPage("Visuals", function(c1, c2)
     CreateToggle(g1, "Box ESP", "esp_box", false)
     CreateToggle(g1, "ESP Name", "esp_name", false)
     CreateToggle(g1, "Skeleton", "esp_skel", false)
-    CreateToggle(g1, "Weapon ESP", "esp_wpn", false)
     CreateToggle(g1, "ESP Team Check", "esp_team", true)
-    CreateToggle(g1, "Health Bar", "esp_health", false)
     local g2 = CreateGroup(c2, "Highlight")
     CreateToggle(g2, "Enable Highlight", "hl_on", false)
     CreateToggle(g2, "Highlight Team Check", "hl_team", true)
-    CreateToggle(g2, "Highlight Color", "hl_color", false)
-    CreateToggle(g2, "Show Name", "hl_name", false)
-end)
-
-AddPage("World", function(c1, c2)
-    local g1 = CreateGroup(c1, "Ambiente")
-    label(g1, {Size = UDim2.new(1, 0, 0, 20), Text = "Em breve...", TextSize = 14, TextColor3 = Theme.sub}, nil)
 end)
 
 AddPage("Settings", function(c1, c2)
-    local g1 = CreateGroup(c1, "Universal Settings")
-    CreateToggle(g1, "Dynamic Island", "set_island", false)
-    CreateToggle(g1, "Watermark HUD", "set_watermark", true)
+    local g1 = CreateGroup(c1, "Menu Settings")
     CreateKeybind(g1, "Menu Keybind", "misc_menukey", "RightShift", "Toggle")
-    local g2 = CreateGroup(c2, "Screen Ambience")
-    CreateSlider(g2, "Ambience Opacity", "set_opacity", 10, 100, 50)
 end)
 
-AddNav("Rage"); AddNav("Legit"); AddNav("Misc"); AddNav("Inventory Changer"); AddNav("Visuals"); AddNav("World"); AddNav("Settings")
+AddNav("Rage"); AddNav("Legit"); AddNav("Misc"); AddNav("Visuals"); AddNav("Settings")
 SwitchPage("Rage")
 
+-- LÓGICA
 local function isKeybindActive(data)
-    if not data or type(data.Key) ~= "string" or data.Key == "None" then return false end
-    if data.Mode == "Always" then return true end
+    if not data then return false end
+    -- Se o Keybind for "None", ele ignora a tecla e considera sempre ativo (desde que o Toggle esteja ON)
+    if data.Mode == "Always" or data.Key == "None" then return true end
     local isDown = false
     if data.Key == "LMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
     elseif data.Key == "RMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
@@ -336,11 +312,7 @@ local function findTarget(fov, bone, teamCheck, visCheck)
     return closest
 end
 
-local fovCircle = new("Frame", {Size = UDim2.fromOffset(100, 100), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, Visible = false}, Overlay)
-new("UICorner", {CornerRadius = UDim.new(1, 0)}, fovCircle)
-new("UIStroke", {Thickness = 1, Color = Theme.accent}, fovCircle)
-
--- LOOP 1: AIMBOT (TASK SPAWN)
+-- LOOP 1: AIMBOT
 task.spawn(function()
     while task.wait(0.01) do
         if not GUI.Parent then break end
@@ -348,24 +320,15 @@ task.spawn(function()
             local cam = Workspace.CurrentCamera
             if not cam then return end
 
-            local circleStroke = fovCircle:FindFirstChild("UIStroke")
-            if circleStroke then circleStroke.Color = Theme.accent end
-
-            if get("sil_fovcircle") and get("sil_on") then
-                fovCircle.Position = UDim2.fromOffset(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-                fovCircle.Size = UDim2.fromOffset(getNum("sil_fov", 120) * 2, getNum("sil_fov", 120) * 2); fovCircle.Visible = true
-            else fovCircle.Visible = false end
-
-            if get("rage_on") and isKeybindActive(get("rage_key", {Key="None"})) then
+            if get("rage_on") and isKeybindActive(get("rage_key", {Key="Always"})) then
                 local target = findTarget(getNum("rage_fov", 120), "Head", get("rage_team", true), false)
                 if target and target.part and target.part.Parent then
-                    -- Aimbot ultra-seguro usando CFrame Lerp na Câmera
                     local goal = CFrame.new(cam.CFrame.Position, target.part.Position)
                     cam.CFrame = cam.CFrame:Lerp(goal, 0.2)
                 end
             end
 
-            if get("trg_on") and isKeybindActive(get("trg_key", {Key="None"})) then
+            if get("trg_on") and isKeybindActive(get("trg_key", {Key="Always"})) then
                 local target = findTarget(60, "Head", get("trg_team", true), false)
                 if target then
                     if (os.clock() - (Prefs["trg_lastfire"] or 0)) > (getNum("trg_delay", 50) / 1000) then
@@ -384,12 +347,12 @@ task.spawn(function()
     end
 end)
 
--- LOOP 2: SILENT AIM (SEM HOOKS - MOUSE LOCK)
+-- LOOP 2: SILENT AIM (MOUSE LOCK)
 task.spawn(function()
     while task.wait() do
         if not GUI.Parent then break end
         pcall(function()
-            if not get("sil_on") or not isKeybindActive(get("sil_key", {Key="None"})) then return end
+            if not get("sil_on") or not isKeybindActive(get("sil_key", {Key="Always"})) then return end
             local t = findTarget(getNum("sil_fov", 200), get("sil_bone", "Head"), get("sil_team", true), get("sil_vis", false))
             if t and t.part then
                 local cam = Workspace.CurrentCamera
@@ -398,10 +361,7 @@ task.spawn(function()
                     if onScreen then
                         local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
                         local delta = Vector2.new(sp.X, sp.Y) - center
-                        pcall(function()
-                            -- Em vez de Hook, apenas puxa o mouse para o alvo
-                            mousemoverel(delta.X, delta.Y)
-                        end)
+                        pcall(function() mousemoverel(delta.X, delta.Y) end)
                     end
                 end
             end
@@ -536,4 +496,4 @@ end
 shared.DrxCleanup = cleanup
 GUI.Destroying:Connect(cleanup)
 
-print("[Drx Hub V10] Carregado sem hooks. Câmera e Silent Aim em modo seguro.")
+print("[Drx Hub V11] Toggles e Sliders 100% Funcionais.")
