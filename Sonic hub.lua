@@ -1,4 +1,4 @@
--- DRX HUB - Total Fix (Lag Removido, UI 100% Estável)
+-- DRX HUB - FIX: FireRenderStepEarlyFunctions Error e UI Travada
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -10,6 +10,7 @@ local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+-- LIMPEZA DE EMERGÊNCIA (Mata qualquer loop antigo que esteja causando o erro)
 if shared.DrxCleanup then pcall(shared.DrxCleanup) end
 for _, name in ipairs({"DrxHub", "DrxOverlay"}) do
     local a = PlayerGui:FindFirstChild(name); if a then a:Destroy() end
@@ -21,16 +22,18 @@ local function set(k, v) Prefs[k] = v end
 local function get(k, d) local v = Prefs[k]; if v == nil then return d end; return v end
 local function getNum(k, d) local v = tonumber(get(k, d)); if not v or v ~= v then return d end; return v end
 
--- TEMA DRX HUB
+-- SISTEMA DE CONEXÕES SEGURAS (Evita loops fantasmas e o erro do RenderStepped)
+local connections = {}
+local function connect(signal, fn)
+    local c = signal:Connect(fn)
+    table.insert(connections, c)
+    return c
+end
+
 local Theme = {
-    bg = Color3.fromRGB(18, 12, 14),
-    panel = Color3.fromRGB(28, 18, 22),
-    card = Color3.fromRGB(38, 24, 30),
-    text = Color3.fromRGB(255, 255, 255),
-    sub = Color3.fromRGB(150, 130, 140),
-    accent = Color3.fromRGB(255, 40, 60),
-    stroke = Color3.fromRGB(60, 35, 45),
-    track = Color3.fromRGB(45, 30, 35),
+    bg = Color3.fromRGB(18, 12, 14), panel = Color3.fromRGB(28, 18, 22), card = Color3.fromRGB(38, 24, 30),
+    text = Color3.fromRGB(255, 255, 255), sub = Color3.fromRGB(150, 130, 140), accent = Color3.fromRGB(255, 40, 60),
+    stroke = Color3.fromRGB(60, 35, 45), track = Color3.fromRGB(45, 30, 35),
 }
 
 local function new(cls, props, parent)
@@ -57,7 +60,6 @@ local TopBar = new("Frame", {Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 = T
 corner(TopBar, 12)
 new("Frame", {Size = UDim2.new(1, 0, 0, 15), Position = UDim2.new(0, 0, 1, -15), BackgroundColor3 = Theme.panel}, TopBar)
 new("Frame", {Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = Theme.accent}, TopBar)
-
 label(TopBar, {Size = UDim2.fromOffset(200, 50), Position = UDim2.fromOffset(20, 0), Text = "Drx Hub", Font = Enum.Font.GothamBlack, TextSize = 22, TextColor3 = Theme.accent})
 label(TopBar, {Size = UDim2.fromOffset(200, 50), Position = UDim2.fromOffset(100, 0), Text = "ENTERPRISE", Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Theme.sub})
 
@@ -67,7 +69,6 @@ closeBtn.MouseLeave:Connect(function() tween(closeBtn, {TextColor3 = Theme.sub})
 closeBtn.MouseButton1Click:Connect(function() GUI:Destroy() end)
 
 local Body = new("Frame", {Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 1, -50), BackgroundTransparency = 1}, Main)
-
 local Sidebar = new("Frame", {Position = UDim2.fromOffset(15, 15), Size = UDim2.fromOffset(170, 495), BackgroundColor3 = Theme.panel}, Body)
 corner(Sidebar, 10); outline(Sidebar, 1, Theme.stroke)
 local NavList = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 0}, Sidebar)
@@ -80,12 +81,10 @@ local PageContainer = new("Frame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTran
 local renderers = {}
 local activeSlider = nil
 
--- NOTIFICAÇÃO OTIMIZADA
 local function Notify(text, isOn)
     local notif = new("Frame", {Size = UDim2.fromOffset(220, 40), Position = UDim2.new(0.5, -110, 1, 20), BackgroundColor3 = Theme.card, ZIndex = 9999}, GUI)
     corner(notif, 8); outline(notif, 1.5, isOn and Theme.accent or Theme.stroke)
-    local bar = new("Frame", {Size = UDim2.fromOffset(3, 24), Position = UDim2.fromOffset(10, 8), BackgroundColor3 = isOn and Theme.accent or Theme.sub}, notif)
-    corner(bar, 1.5)
+    local bar = new("Frame", {Size = UDim2.fromOffset(3, 24), Position = UDim2.fromOffset(10, 8), BackgroundColor3 = isOn and Theme.accent or Theme.sub}, notif); corner(bar, 1.5)
     label(notif, {Size = UDim2.new(1, -30, 0, 16), Position = UDim2.fromOffset(20, 5), Text = text, TextSize = 13, Font = Enum.Font.GothamBold}, nil)
     
     tween(notif, {Position = UDim2.new(0.5, -110, 1, -80)})
@@ -97,14 +96,12 @@ local function Notify(text, isOn)
     end)
 end
 
--- COMPONENTES UI OTIMIZADOS (SEM LAG)
 local function CreateGroup(parent, title)
     local g = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1}, parent)
     new("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, g)
     local head = new("Frame", {Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1, LayoutOrder = 1}, g)
     local line = new("Frame", {Size = UDim2.fromOffset(3, 14), Position = UDim2.fromOffset(0, 3), BackgroundColor3 = Theme.accent}, head); corner(line, 1)
     label(head, {Size = UDim2.new(1, -10, 1, 0), Position = UDim2.fromOffset(10, 0), Text = title, Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = Theme.accent}, nil)
-
     local body = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 2}, g)
     new("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, body)
     return body
@@ -115,7 +112,6 @@ local function CreateToggle(parent, name, key, default)
     local row = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = Theme.card}, parent)
     corner(row, 8); outline(row, 1, Theme.stroke)
     label(row, {Size = UDim2.new(1, -60, 1, 0), Position = UDim2.fromOffset(12, 0), Text = name, TextSize = 13, Font = Enum.Font.GothamBold}, nil)
-    
     local sw = new("TextButton", {Size = UDim2.new(0, 36, 0, 20), Position = UDim2.new(1, -48, 0.5, -10), BackgroundColor3 = Theme.track, Text = "", AutoButtonColor = false}, row)
     corner(sw, 10)
     local knob = new("Frame", {Size = UDim2.fromOffset(14, 14), Position = UDim2.fromOffset(3, 3), BackgroundColor3 = Theme.sub}, sw); corner(knob, 7)
@@ -126,7 +122,7 @@ local function CreateToggle(parent, name, key, default)
         tween(knob, {Position = on and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3), BackgroundColor3 = on and Theme.text or Theme.sub})
     end
     renderers[key] = render
-    sw.MouseButton1Click:Connect(function() set(key, not get(key)); render() end) -- Notify removido aqui para evitar lag
+    sw.MouseButton1Click:Connect(function() set(key, not get(key)); render() end)
     render()
 end
 
@@ -148,7 +144,6 @@ local function CreateSlider(parent, name, key, min, max, default)
     local function update(pct)
         local v = math.floor(min + pct * (max - min) + 0.5)
         set(key, v); pct = (v - min) / math.max(max - min, 1)
-        -- Sem TweenService! Atualização direta impede o lag de 60fps
         fill.Size = UDim2.new(pct, 0, 1, 0)
         knob.Position = UDim2.new(pct, 0, 0.5, 0)
         valLbl.Text = tostring(v)
@@ -157,10 +152,8 @@ local function CreateSlider(parent, name, key, min, max, default)
     
     btn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            activeSlider = {btn = btn, update = update, track = track}
-            if track.AbsoluteSize.X > 0 then
-                update(math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1))
-            end
+            activeSlider = {update = update, track = track}
+            update(math.clamp((input.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1))
         end
     end)
     minus.MouseButton1Click:Connect(function() update(math.clamp((getNum(key) - 1 - min) / math.max(max - min, 1), 0, 1)) end)
@@ -223,7 +216,6 @@ local function CreateKeybind(parent, name, key, defaultKey, defaultMode)
             
             if kName then
                 set(key, {Key = kName, Mode = get(key).Mode}); btnKey.Text = kName; conn:Disconnect()
-                Notify("Tecla Definida", true)
             end
         end)
     end)
@@ -233,7 +225,6 @@ local Pages, NavButtons = {}, {}
 
 local function AddPage(name, buildFunc)
     local page = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 4, ScrollBarImageColor3 = Theme.accent, Visible = false, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(0,0,0,0)}, PageContainer)
-    
     local grid = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1}, page)
     new("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 15), SortOrder = Enum.SortOrder.LayoutOrder}, grid)
     
@@ -248,7 +239,7 @@ local function AddPage(name, buildFunc)
 end
 
 local function SwitchPage(name)
-    activeSlider = nil -- Previne travamento se trocar de aba arrastando o slider
+    activeSlider = nil 
     for n, p in pairs(Pages) do p.Visible = (n == name) end
     for n, b in pairs(NavButtons) do
         local sel = (n == name)
@@ -274,7 +265,6 @@ local function AddNav(name)
     btn.MouseButton1Click:Connect(function() SwitchPage(name) end)
 end
 
--- CONTEÚDO DAS PÁGINAS
 AddPage("Rage", function(c1, c2)
     local g1 = CreateGroup(c1, "Ragebot")
     CreateToggle(g1, "Ragebot", "rage_on", false)
@@ -284,7 +274,6 @@ AddPage("Rage", function(c1, c2)
     CreateSlider(g1, "FOV Size", "rage_fovsize", 10, 800, 720)
     CreateKeybind(g1, "Auto Shoot", "rage_autoshoot", "None", "Hold")
     CreateToggle(g1, "Team Check", "rage_team", true)
-    
     local g2 = CreateGroup(c2, "Weapon Mods")
     CreateToggle(g2, "Rapid Fire", "wpn_rapid", false)
     CreateToggle(g2, "No Recoil", "wpn_recoil", false)
@@ -300,11 +289,9 @@ AddPage("Legit", function(c1, c2)
     CreateToggle(g1, "Visible Only", "sil_vis", false)
     CreateDropdown(g1, "Head", "sil_bone", {"Head", "Torso", "Root"}, "Head")
     CreateToggle(g1, "Team Check", "sil_team", true)
-    
     local g2 = CreateGroup(c2, "FOV")
     CreateSlider(g2, "FOV Size", "sil_fov", 10, 800, 120)
     CreateToggle(g2, "FOV Circle", "sil_fovcircle", true)
-    
     local g3 = CreateGroup(c2, "Triggerbot")
     CreateToggle(g3, "Triggerbot", "trg_on", false)
     CreateKeybind(g3, "Trigger Key", "trg_key", "None", "Toggle")
@@ -317,7 +304,6 @@ AddPage("Misc", function(c1, c2)
     CreateToggle(g1, "Spectator list", "misc_spect", false)
     CreateToggle(g1, "Anti Spectate", "misc_antispect", false)
     CreateToggle(g1, "Bhop", "misc_bhop", false)
-    
     local g2 = CreateGroup(c2, "Camera")
     CreateToggle(g2, "Third Person", "cam_third", false)
     CreateKeybind(g2, "Third Person Key", "cam_key", "None", "Toggle")
@@ -337,13 +323,11 @@ AddPage("Visuals", function(c1, c2)
     CreateToggle(g1, "Weapon ESP", "esp_wpn", false)
     CreateToggle(g1, "ESP Team Check", "esp_team", true)
     CreateToggle(g1, "Health Bar", "esp_health", false)
-    
     local g2 = CreateGroup(c2, "Highlight")
     CreateToggle(g2, "Enable Highlight", "hl_on", false)
     CreateToggle(g2, "Highlight Team Check", "hl_team", true)
     CreateToggle(g2, "Highlight Color", "hl_color", false)
     CreateToggle(g2, "Show Name", "hl_name", false)
-    
     local g3 = CreateGroup(c2, "Tracers")
     CreateToggle(g3, "Enable Tracers", "trc_on", false)
     CreateSlider(g3, "Tracer Width", "trc_width", 1, 10, 2)
@@ -361,22 +345,18 @@ AddPage("Settings", function(c1, c2)
     CreateToggle(g1, "Watermark HUD", "set_watermark", true)
     CreateToggle(g1, "Quick Access Keybind", "set_qaccess", false)
     CreateToggle(g1, "Mobile Toggle Button", "set_mobile", false)
+    -- Menu Keybind adicionado aqui para evitar bugs
+    CreateKeybind(g1, "Menu Keybind", "misc_menukey", "RightShift", "Toggle")
     
     local g2 = CreateGroup(c2, "Screen Ambience")
     CreateSlider(g2, "Ambience Opacity", "set_opacity", 10, 100, 50)
     CreateToggle(g2, "Show Only When UI...", "set_showonly", false)
 end)
 
-AddNav("Rage")
-AddNav("Legit")
-AddNav("Misc")
-AddNav("Inventory Changer")
-AddNav("Visuals")
-AddNav("World")
-AddNav("Settings")
+AddNav("Rage"); AddNav("Legit"); AddNav("Misc"); AddNav("Inventory Changer"); AddNav("Visuals"); AddNav("World"); AddNav("Settings")
 SwitchPage("Rage")
 
--- LÓGICA DO JOGO
+-- LÓGICA DO JOGO (TUDO PROTEGIDO)
 local function viewportMouse()
     local m = UserInputService:GetMouseLocation()
     local inset = Vector2.new(0, 36)
@@ -387,7 +367,6 @@ end
 local function isKeybindActive(data)
     if not data or type(data.Key) ~= "string" or data.Key == "None" then return false end
     if data.Mode == "Always" then return true end
-    
     local isDown = false
     if data.Key == "LMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
     elseif data.Key == "RMB" then isDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
@@ -400,9 +379,7 @@ local function isKeybindActive(data)
     if data.Mode == "Hold" then return isDown end
     if data.Mode == "Toggle" then
         local sk = "tgl_" .. tostring(data.Key)
-        if isDown and not Prefs[sk .. "_prev"] then 
-            Prefs[sk] = not Prefs[sk] 
-        end
+        if isDown and not Prefs[sk .. "_prev"] then Prefs[sk] = not Prefs[sk] end
         Prefs[sk .. "_prev"] = isDown
         return Prefs[sk]
     end
@@ -445,12 +422,17 @@ end
 
 local fovCircle = new("Frame", {Size = UDim2.fromOffset(100, 100), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, Visible = false}, Overlay)
 new("UICorner", {CornerRadius = UDim.new(1, 0)}, fovCircle)
-local fovStroke = new("UIStroke", {Thickness = 1, Color = Theme.accent}, fovCircle)
+new("UIStroke", {Thickness = 1, Color = Theme.accent}, fovCircle)
 
-RunService.RenderStepped:Connect(function()
+-- LOOP 1 (RenderStepped): Aimbot e FOV
+connect(RunService.RenderStepped, function()
+    if not GUI.Parent then return end
     pcall(function()
         local cam = Workspace.CurrentCamera
         if not cam then return end
+        
+        local circleStroke = fovCircle:FindFirstChild("UIStroke")
+        if circleStroke then circleStroke.Color = Theme.accent end
         
         if get("sil_fovcircle") and get("sil_on") then
             fovCircle.Position = UDim2.fromOffset(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
@@ -459,7 +441,7 @@ RunService.RenderStepped:Connect(function()
         
         if get("rage_on") and isKeybindActive(get("rage_key", {Key="None"})) then
             local target = findTarget(getNum("rage_fov", 120), "Head", get("rage_team", true), false)
-            if target then
+            if target and target.part and target.part.Parent then
                 cam.CFrame = cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position, target.part.Position), 0.2)
             end
         end
@@ -481,7 +463,8 @@ RunService.RenderStepped:Connect(function()
 end)
 
 local silentPart = nil
-RunService.RenderStepped:Connect(function()
+connect(RunService.RenderStepped, function()
+    if not GUI.Parent then return end
     pcall(function()
         if not get("sil_on") or not isKeybindActive(get("sil_key", {Key="None"})) then silentPart = nil; return end
         local t = findTarget(getNum("sil_fov", 200), get("sil_bone", "Head"), get("sil_team", true), get("sil_vis", false))
@@ -504,9 +487,9 @@ pcall(function()
     end)
 end)
 
+-- ESP
 local ESP = {}
 local BONES = {{"Head","UpperTorso"},{"UpperTorso","LowerTorso"},{"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"}}
-
 local function destroyESP(e)
     if e.Box then e.Box:Destroy() end
     if e.Label then e.Label:Destroy() end
@@ -514,13 +497,13 @@ local function destroyESP(e)
     if e.Bones then for _,b in pairs(e.Bones) do b:Destroy() end end
 end
 
-RunService.RenderStepped:Connect(function()
+connect(RunService.RenderStepped, function()
+    if not GUI.Parent then return end
     pcall(function()
         if not get("esp_box") and not get("esp_name") and not get("esp_skel") and not get("hl_on") then
             for k,e in pairs(ESP) do destroyESP(e); ESP[k] = nil end
             return
         end
-        
         local cam = Workspace.CurrentCamera
         if not cam then return end
         local seen = {}
@@ -545,18 +528,15 @@ RunService.RenderStepped:Connect(function()
                         end
                         
                         local sp, onScreen = cam:WorldToViewportPoint(hrp.Position)
-                        
                         if onScreen then
                             local h = math.abs(cam:WorldToViewportPoint(hrp.Position + Vector3.new(0,3,0)).Y - cam:WorldToViewportPoint(hrp.Position - Vector3.new(0,3,0)).Y)
                             local w = h * 0.65
                             local tlX, tlY = sp.X - w/2, sp.Y - h/2
                             
-                            if get("esp_box") then
-                                e.Box.Position = UDim2.fromOffset(tlX, tlY); e.Box.Size = UDim2.fromOffset(w, h); e.Box.Visible = true
+                            if get("esp_box") then e.Box.Position = UDim2.fromOffset(tlX, tlY); e.Box.Size = UDim2.fromOffset(w, h); e.Box.Visible = true
                             else e.Box.Visible = false end
                             
-                            if get("esp_name") then
-                                e.Label.Text = plr.Name; e.Label.Position = UDim2.fromOffset(sp.X, tlY - 4); e.Label.Visible = true
+                            if get("esp_name") then e.Label.Text = plr.Name; e.Label.Position = UDim2.fromOffset(sp.X, tlY - 4); e.Label.Visible = true
                             else e.Label.Visible = false end
                             
                             if get("esp_skel") then
@@ -565,14 +545,12 @@ RunService.RenderStepped:Connect(function()
                                     if not line then line = new("Frame", {AnchorPoint = Vector2.new(0.5,0.5), Visible=false, BackgroundColor3 = Theme.accent}, Overlay); e.Bones[i] = line end
                                     local a, b = char:FindFirstChild(pair[1]), char:FindFirstChild(pair[2])
                                     if a and b then
-                                        local sa, oa = cam:WorldToViewportPoint(a.Position)
-                                        local sb, ob = cam:WorldToViewportPoint(b.Position)
+                                        local sa, oa = cam:WorldToViewportPoint(a.Position); local sb, ob = cam:WorldToViewportPoint(b.Position)
                                         if oa and ob then
                                             local d = Vector2.new(sb.X, sb.Y) - Vector2.new(sa.X, sa.Y)
                                             line.Size = UDim2.fromOffset(d.Magnitude, 1)
                                             line.Position = UDim2.fromOffset((sa.X+sb.X)/2, (sa.Y+sb.Y)/2)
-                                            line.Rotation = math.deg(math.atan2(d.Y, d.X))
-                                            line.Visible = true
+                                            line.Rotation = math.deg(math.atan2(d.Y, d.X)); line.Visible = true
                                         else line.Visible = false end
                                     else line.Visible = false end
                                 end
@@ -582,8 +560,7 @@ RunService.RenderStepped:Connect(function()
                             for _,b in pairs(e.Bones) do b.Visible = false end
                         end
                         
-                        if get("hl_on") then
-                            e.Highlight.Adornee = char; e.Highlight.FillColor = Theme.accent; e.Highlight.Enabled = true
+                        if get("hl_on") then e.Highlight.Adornee = char; e.Highlight.FillColor = Theme.accent; e.Highlight.Enabled = true
                         else e.Highlight.Enabled = false end
                     else
                         if e then e.Box.Visible = false; e.Label.Visible = false; e.Highlight.Enabled = false; for _,b in pairs(e.Bones) do b.Visible = false end end
@@ -591,15 +568,14 @@ RunService.RenderStepped:Connect(function()
                 end
             end
         end
-        
-        for k,e in pairs(ESP) do
-            if not seen[k] then destroyESP(e); ESP[k] = nil end
-        end
+        for k,e in pairs(ESP) do if not seen[k] then destroyESP(e); ESP[k] = nil end end
     end)
 end)
 
+-- PLAYER MODS
 local noclipActive = false
-RunService.Stepped:Connect(function()
+connect(RunService.Stepped, function()
+    if not GUI.Parent then return end
     pcall(function()
         local char = LocalPlayer.Character
         if not char then return end
@@ -607,9 +583,7 @@ RunService.Stepped:Connect(function()
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hum or not hrp then return end
         
-        if get("misc_bhop") and UserInputService:IsKeyDown(Enum.KeyCode.Space) then 
-            hum:ChangeState(Enum.HumanoidStateType.Jumping) 
-        end
+        if get("misc_bhop") and UserInputService:IsKeyDown(Enum.KeyCode.Space) then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
         
         if get("plr_noclip") then
             for _, v in ipairs(char:GetDescendants()) do if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end end
@@ -629,14 +603,14 @@ RunService.Stepped:Connect(function()
     end)
 end)
 
+-- INPUTS
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
     local mk = get("misc_menukey", {Key="RightShift", Mode="Toggle"})
     local match = (input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == mk.Key) or 
                   (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or 
                   (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB")
-    if mk.Mode == "Toggle" and match then 
-        GUI.Enabled = not GUI.Enabled
+    if mk.Mode == "Toggle" and match then GUI.Enabled = not GUI.Enabled
     elseif mk.Mode == "Hold" and match then GUI.Enabled = true end
 end)
 
@@ -654,6 +628,7 @@ TopBar.InputBegan:Connect(function(input)
         dragging = true; dragStart = input.Position; startPos = Main.Position
     end
 end)
+
 UserInputService.InputChanged:Connect(function(input)
     if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local d = input.Position - dragStart
@@ -668,6 +643,7 @@ UserInputService.InputChanged:Connect(function(input)
         end
     end
 end)
+
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
         dragging = false
@@ -675,14 +651,21 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
+-- CLEANUP (DESCONECTA TUDO PARA NÃO DAR O ERRO DO FIRE RENDER STEP)
 local cleaned = false
 local function cleanup()
     if cleaned then return end; cleaned = true
     if shared.DrxCleanup == cleanup then shared.DrxCleanup = nil end
+    
+    for _, c in ipairs(connections) do
+        if c.Connected then c:Disconnect() end
+    end
+    connections = {}
+    
     for k,e in pairs(ESP) do destroyESP(e); ESP[k]=nil end
     Overlay:Destroy(); if GUI.Parent then GUI:Destroy() end
 end
 shared.DrxCleanup = cleanup
 GUI.Destroying:Connect(cleanup)
 
-print("[Drx Hub] Carregado com sucesso. Otimizado contra travamentos.")
+print("[Drx Hub] Carregado sem travar.")
