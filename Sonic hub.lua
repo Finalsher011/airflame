@@ -1,4 +1,4 @@
--- Drx Hub V26 (V25 + hooks sob demanda, namecall com caminho rapido, varredura de armas fatiada) | base: V25 (V24 + varreduras pesadas em thread separada: sem travada ao ligar opcoes) | base: V24 (V23 + hook do silent sem corromper namecall, silent sem depender de janela de tiro, armas por modulos carregados, mira em primeira pessoa) | base: V23 (V22 + mira só em partida) - correção de V21: alvos NPC, ordem de declaração, mira com fallback, armas por descoberta em runtime, confirmação ao fechar
+-- Eclypse V27 (base: Eclypse V26) | tela de carregamento, cartao Finalsher/Discord, fundo preto configuravel, correcoes de desempenho (mouse do menu, HUD, profiler)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -13,26 +13,60 @@ local LP = Players.LocalPlayer
 local PlayerGui = LP:WaitForChild("PlayerGui")
 
 if shared.DrxCleanup then pcall(shared.DrxCleanup) end
-for _, n in ipairs({"DrxHub", "DrxOverlay", "DrxMouseModal"}) do
+for _, n in ipairs({"DrxHub", "DrxOverlay", "DrxMouseModal", "EclypseLoading"}) do
     local a = PlayerGui:FindFirstChild(n); if a then a:Destroy() end
     local b = game:GetService("CoreGui"):FindFirstChild(n); if b then b:Destroy() end
 end
 
 local Prefs, Labels, BindNames, Conns, Warned = {}, {}, {}, {}, {}
 local Booted, notify = false, nil
+local EX = {perfLast = {}}
 local function set(k, v)
     local old = Prefs[k]; Prefs[k] = v
     if Booted and type(v) == "boolean" and old ~= v and Labels[k] then notify(Labels[k], v and "enabled" or "disabled") end
+    if old ~= v and EX.prefHook then EX.prefHook(k) end
 end
 local function get(k, d) local v = Prefs[k]; if v == nil then return d end; return v end
 local function getNum(k, d) local v = tonumber(get(k, d)); if not v or v ~= v then return d end; return v end
 
 local Theme = {
-    bg = Color3.fromRGB(18, 12, 14), panel = Color3.fromRGB(28, 18, 22), card = Color3.fromRGB(38, 24, 30),
-    text = Color3.fromRGB(255, 255, 255), sub = Color3.fromRGB(150, 130, 140), accent = Color3.fromRGB(255, 40, 60),
-    stroke = Color3.fromRGB(60, 35, 45), track = Color3.fromRGB(45, 30, 35),
+    bg = Color3.fromRGB(0, 0, 0), panel = Color3.fromRGB(10, 10, 10), card = Color3.fromRGB(18, 18, 18),
+    text = Color3.fromRGB(255, 255, 255), sub = Color3.fromRGB(150, 150, 160), accent = Color3.fromRGB(255, 40, 60),
+    stroke = Color3.fromRGB(44, 44, 44), track = Color3.fromRGB(32, 32, 32),
 }
-local function new(cls, props, parent) local i = Instance.new(cls); for k, v in pairs(props) do i[k] = v end; if parent then i.Parent = parent end; return i end
+EX.Brand = {name = "Eclypse", author = "Finalsher", discord = "discord.gg/YyV2WkWTKc", invite = "https://discord.gg/YyV2WkWTKc"}
+EX.Palette = {bg = Theme.bg, panel = Theme.panel, card = Theme.card, track = Theme.track, stroke = Theme.stroke}
+EX.Themed = setmetatable({}, {__mode = "k"})
+function EX.roleOf(c) for role, col in pairs(EX.Palette) do if col == c then return role end end end
+local function new(cls, props, parent)
+    local i = Instance.new(cls); for k, v in pairs(props) do i[k] = v end
+    local c = props.BackgroundColor3; if c then local r = EX.roleOf(c); if r then EX.Themed[i] = {prop = "BackgroundColor3", role = r} end end
+    if cls == "UIStroke" and props.Color then local r = EX.roleOf(props.Color); if r then EX.Themed[i] = {prop = "Color", role = r} end end
+    if parent then i.Parent = parent end; return i
+end
+-- cor de fundo configuravel (Configuracoes): recalcula a paleta e recolore so o que ainda esta na cor antiga do seu papel
+function EX.derive(r, g, b)
+    local function up(d) return Color3.fromRGB(math.clamp(r + d, 0, 255), math.clamp(g + d, 0, 255), math.clamp(b + d, 0, 255)) end
+    return {bg = up(0), panel = up(10), card = up(18), track = up(32), stroke = up(44)}
+end
+function EX.applyBackground()
+    local np = EX.derive(getNum("set_bg_r", 0), getNum("set_bg_g", 0), getNum("set_bg_b", 0))
+    for inst, info in pairs(EX.Themed) do
+        if inst.Parent and inst[info.prop] == EX.Palette[info.role] then inst[info.prop] = np[info.role] end
+    end
+    for role, col in pairs(np) do EX.Palette[role] = col; Theme[role] = col end
+end
+EX.prefHook = function(k)
+    if (k == "set_bg_r" or k == "set_bg_g" or k == "set_bg_b") and not EX.bgPending then
+        EX.bgPending = true
+        task.delay(0.05, function() EX.bgPending = false; pcall(EX.applyBackground) end)
+    end
+end
+function EX.timed(name, fn, ...)
+    local t0 = os.clock(); fn(...)
+    local dt = os.clock() - t0
+    if dt > 0.016 then local now = os.clock(); if now - (EX.perfLast[name] or 0) > 1 then EX.perfLast[name] = now; print(string.format("[Eclypse perf] %s levou %.1f ms", name, dt * 1000)) end end
+end
 local function corner(i, r) return new("UICorner", {CornerRadius = UDim.new(0, r)}, i) end
 local function outline(i, t, c) return new("UIStroke", {Color = c or Theme.stroke, Thickness = t or 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, i) end
 local function label(parent, props)
@@ -44,7 +78,145 @@ end
 local TWEEN = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 local function tween(i, p) TweenService:Create(i, TWEEN, p):Play() end
 
-local GUI = new("ScreenGui", {Name = "DrxHub", ResetOnSpawn = false, DisplayOrder = 100, ZIndexBehavior = Enum.ZIndexBehavior.Global, Enabled = true}, PlayerGui)
+-- ===== ECLYPSE: logo + tela de carregamento =====
+EX.LOGO_B64 = "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"
+do
+    local map = {}; local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    for i = 1, 64 do map[string.byte(alphabet, i)] = i - 1 end
+    function EX.b64decode(s)
+        local out, n, bits, acc = {}, 0, 0, 0
+        for i = 1, #s do
+            local v = map[string.byte(s, i)]
+            if v then
+                acc = acc * 64 + v; bits = bits + 6
+                if bits >= 8 then bits = bits - 8; local pw = 2 ^ bits; local byte = math.floor(acc / pw); acc = acc - byte * pw; n = n + 1; out[n] = string.char(byte) end
+            end
+        end
+        return table.concat(out)
+    end
+    function EX.logoAsset()
+        local gca = getcustomasset or getsynasset
+        if not (writefile and gca) then return nil end
+        local ok, res = pcall(function()
+            local name = "eclypse_logo_v1.png"
+            if not (isfile and isfile(name)) then writefile(name, EX.b64decode(EX.LOGO_B64)) end
+            return gca(name)
+        end)
+        if ok and type(res) == "string" and res ~= "" then return res end
+        return nil
+    end
+end
+function EX.makeLogo(parent, h, props)
+    props = props or {}
+    local z = props.ZIndex or 1
+    local w = math.floor(h * 208 / 178 + 0.5)
+    local box = new("Frame", {Name = "EclypseLogo", Size = UDim2.fromOffset(w, h), BackgroundTransparency = 1, AnchorPoint = props.AnchorPoint or Vector2.new(0, 0), Position = props.Position or UDim2.fromOffset(0, 0), ZIndex = z}, parent)
+    if EX.asset then
+        new("ImageLabel", {Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Image = EX.asset, ScaleType = Enum.ScaleType.Fit, ZIndex = z}, box)
+    else
+        local sq = new("Frame", {Size = UDim2.fromOffset(h, h), Position = UDim2.fromOffset((w - h) / 2, 0), BackgroundTransparency = 1, ZIndex = z}, box)
+        local moon = new("Frame", {Size = UDim2.fromScale(0.78, 0.78), Position = UDim2.fromScale(0.06, 0.11), BackgroundColor3 = Color3.fromRGB(214, 218, 228), BorderSizePixel = 0, ZIndex = z}, sq)
+        new("UICorner", {CornerRadius = UDim.new(0.5, 0)}, moon)
+        new("UIGradient", {Rotation = 40, Color = ColorSequence.new(Color3.fromRGB(240, 242, 248), Color3.fromRGB(110, 116, 130))}, moon)
+        local cut = new("Frame", {Size = UDim2.fromScale(0.7, 0.7), Position = UDim2.fromScale(0.2, 0.07), BackgroundColor3 = props.cut or Color3.fromRGB(8, 4, 10), BorderSizePixel = 0, ZIndex = z + 1}, sq)
+        new("UICorner", {CornerRadius = UDim.new(0.5, 0)}, cut)
+        for _, s in ipairs({{0.035, 0.46, 0}, {0.46, 0.035, 0}, {0.03, 0.24, 45}, {0.03, 0.24, -45}}) do
+            new("Frame", {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.6, 0.5), Size = UDim2.fromScale(s[1], s[2]), Rotation = s[3], BackgroundColor3 = Color3.fromRGB(245, 246, 250), BorderSizePixel = 0, ZIndex = z + 2}, sq)
+        end
+    end
+    return box
+end
+EX.Load = {active = true, shown = 0, target = 0, t0 = os.clock(), text = "Preparing environment...", ready = false}
+function EX.step(p, text) local L = EX.Load; L.target = p; if text then L.text = text end; task.wait() end
+function EX.destroyLoading()
+    local L = EX.Load
+    if L.conn then L.conn:Disconnect(); L.conn = nil end
+    if L.gui then L.gui:Destroy(); L.gui = nil end
+end
+function EX.buildLoading()
+    local L = EX.Load
+    local acc = Theme.accent
+    local sg = new("ScreenGui", {Name = "EclypseLoading", ResetOnSpawn = false, DisplayOrder = 10000, IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling}, PlayerGui)
+    L.gui = sg
+    local root = new("CanvasGroup", {Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, GroupTransparency = 1}, sg)
+    L.root = root
+    new("Frame", {Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(4, 2, 6), BackgroundTransparency = 0.06, BorderSizePixel = 0}, root)
+    local cx, cy = 0.5, 0.46
+    L.glows = {}
+    for i = 1, 8 do
+        local d = 1100 - (i - 1) * 110
+        local g = new("Frame", {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(cx, cy), Size = UDim2.fromOffset(d, d), BackgroundColor3 = Color3.fromRGB(150, 14, 50), BackgroundTransparency = 0.975 - i * 0.012, BorderSizePixel = 0}, root)
+        new("UICorner", {CornerRadius = UDim.new(0.5, 0)}, g)
+        L.glows[i] = g
+    end
+    local rng = Random.new(7)
+    L.parts = {}
+    for i = 1, 70 do
+        local sz = (rng:NextNumber() < 0.2) and 3 or 2
+        local f = new("Frame", {AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(sz, sz), BackgroundColor3 = (rng:NextNumber() < 0.35) and Color3.fromRGB(255, 80, 120) or Color3.fromRGB(235, 235, 245), BorderSizePixel = 0}, root)
+        L.parts[i] = {f = f, a = rng:NextNumber() * 6.283, r = 90 + rng:NextNumber() * 300, s = (rng:NextNumber() - 0.5) * 0.25, ph = rng:NextNumber() * 6.283}
+    end
+    L.ring = {}
+    for i = 1, 56 do
+        local f = new("Frame", {AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(3, 3), BackgroundColor3 = Color3.fromRGB(255, 120, 150), BackgroundTransparency = 0.45, BorderSizePixel = 0}, root)
+        new("UICorner", {CornerRadius = UDim.new(0.5, 0)}, f)
+        L.ring[i] = f
+    end
+    local halo = new("Frame", {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(cx, 0, cy, -34), Size = UDim2.fromOffset(210, 210), BackgroundTransparency = 1}, root)
+    new("UICorner", {CornerRadius = UDim.new(0.5, 0)}, halo)
+    new("UIStroke", {Color = Color3.fromRGB(255, 90, 130), Thickness = 1.2, Transparency = 0.55}, halo)
+    L.logoH = 150
+    L.logo = EX.makeLogo(root, L.logoH, {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(cx, 0, cy, -34), cut = Color3.fromRGB(8, 4, 10)})
+    L.logoW = L.logo.Size.X.Offset
+    label(root, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(cx, 0, cy, 70), Size = UDim2.fromOffset(400, 16), Text = "L O A D I N G    I N T E R F A C E", Font = Enum.Font.GothamBold, TextSize = 11, TextColor3 = Color3.fromRGB(255, 70, 110), TextXAlignment = Enum.TextXAlignment.Center})
+    local barW = 380
+    local track = new("Frame", {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(cx, 0, cy, 104), Size = UDim2.fromOffset(barW, 4), BackgroundColor3 = Color3.fromRGB(40, 22, 30), BorderSizePixel = 0}, root)
+    new("UICorner", {CornerRadius = UDim.new(0.5, 0)}, track)
+    local fill = new("Frame", {Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = acc, BorderSizePixel = 0}, track)
+    new("UICorner", {CornerRadius = UDim.new(0.5, 0)}, fill)
+    new("UIGradient", {Color = ColorSequence.new(Color3.fromRGB(190, 20, 50), Color3.fromRGB(255, 150, 180))}, fill)
+    local knobHalo = new("Frame", {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 0, 0.5, 0), Size = UDim2.fromOffset(22, 22), BackgroundColor3 = acc, BackgroundTransparency = 0.8, BorderSizePixel = 0}, track)
+    new("UICorner", {CornerRadius = UDim.new(0.5, 0)}, knobHalo)
+    local knob = new("Frame", {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 0, 0.5, 0), Size = UDim2.fromOffset(9, 9), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BorderSizePixel = 0}, track)
+    new("UICorner", {CornerRadius = UDim.new(0.5, 0)}, knob)
+    local statusLbl = label(root, {AnchorPoint = Vector2.new(0, 0), Position = UDim2.new(cx, -barW / 2, cy, 118), Size = UDim2.fromOffset(barW * 0.7, 16), Text = L.text, TextSize = 11, TextColor3 = Color3.fromRGB(170, 160, 170)})
+    local pctLbl = label(root, {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(cx, barW / 2, cy, 118), Size = UDim2.fromOffset(80, 16), Text = "0%", TextSize = 12, Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(255, 70, 110), TextXAlignment = Enum.TextXAlignment.Right})
+    label(root, {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -22), Size = UDim2.fromOffset(500, 14), Text = EX.Brand.name:upper() .. "  |  UNIVERSAL  |  by " .. EX.Brand.author, TextSize = 10, TextColor3 = Color3.fromRGB(120, 110, 120), TextXAlignment = Enum.TextXAlignment.Center})
+    local pill = new("Frame", {Position = UDim2.fromOffset(14, 14), Size = UDim2.fromOffset(118, 26), BackgroundColor3 = Color3.fromRGB(24, 10, 18), BackgroundTransparency = 0.2, BorderSizePixel = 0}, root)
+    new("UICorner", {CornerRadius = UDim.new(0.5, 0)}, pill)
+    new("UIStroke", {Color = Color3.fromRGB(255, 70, 110), Thickness = 1, Transparency = 0.6}, pill)
+    local dot = new("Frame", {Position = UDim2.fromOffset(10, 9), Size = UDim2.fromOffset(8, 8), BackgroundColor3 = acc, BorderSizePixel = 0}, pill)
+    new("UICorner", {CornerRadius = UDim.new(0.5, 0)}, dot)
+    label(pill, {Position = UDim2.fromOffset(26, 0), Size = UDim2.new(1, -30, 1, 0), Text = EX.Brand.author, TextSize = 11, Font = Enum.Font.GothamBold})
+    local t = 0
+    L.conn = RunService.RenderStepped:Connect(function(dt)
+        t = t + dt
+        local el = os.clock() - L.t0
+        local goal = math.min(L.target, math.clamp(el / 2.6, 0, 1) * 100)
+        L.shown = L.shown + (goal - L.shown) * math.min(1, dt * 7)
+        if L.target >= 100 and L.shown >= 99.4 then L.shown = 100; L.ready = true end
+        local pct = L.shown / 100
+        fill.Size = UDim2.new(pct, 0, 1, 0); knob.Position = UDim2.new(pct, 0, 0.5, 0); knobHalo.Position = knob.Position
+        pctLbl.Text = string.format("%d%%", math.floor(L.shown + 0.5)); statusLbl.Text = L.text
+        local pulse = (math.sin(t * 2) + 1) / 2
+        for i, g in ipairs(L.glows) do g.BackgroundTransparency = (0.975 - i * 0.012) - pulse * 0.01 end
+        for _, q in ipairs(L.parts) do
+            q.a = q.a + q.s * dt
+            q.f.Position = UDim2.new(cx, math.cos(q.a) * (q.r + math.sin(t * 0.7 + q.ph) * 6), cy, math.sin(q.a) * (q.r + math.sin(t * 0.7 + q.ph) * 6) * 0.9)
+            q.f.BackgroundTransparency = 0.25 + 0.55 * (math.sin(t * 2.4 + q.ph) + 1) / 2
+        end
+        local ra = t * 0.18
+        for i, f in ipairs(L.ring) do local a = ra + (i / #L.ring) * 6.2832; f.Position = UDim2.new(cx, math.cos(a) * 250, cy, math.sin(a) * 250 * 0.9) end
+        local sc = 1 + 0.015 * math.sin(t * 2.2)
+        L.logo.Size = UDim2.fromOffset(L.logoW * sc, L.logoH * sc)
+    end)
+    TweenService:Create(root, TweenInfo.new(0.4), {GroupTransparency = 0}):Play()
+end
+EX.asset = EX.logoAsset()
+EX.buildLoading()
+EX.step(10, "Preparing environment...")
+
+local GUI = new("ScreenGui", {Name = "DrxHub", ResetOnSpawn = false, DisplayOrder = 100, ZIndexBehavior = Enum.ZIndexBehavior.Global, Enabled = false}, PlayerGui)
 local Overlay = new("ScreenGui", {Name = "DrxOverlay", ResetOnSpawn = false, DisplayOrder = 999, IgnoreGuiInset = true}, PlayerGui)
 
 -- UI MOUSE FIX
@@ -53,9 +225,9 @@ do
     local ACTION_SINK, STEP_NAME = "DrxUiMouseSink", "DrxUiMouseUnlock"
     local function sink() return Enum.ContextActionResult.Sink end
     local function enforce()
-        if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then UiMouse.wanted = UserInputService.MouseBehavior end
-        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-        UserInputService.MouseIconEnabled = true
+        local mb = UserInputService.MouseBehavior
+        if mb ~= Enum.MouseBehavior.Default then UiMouse.wanted = mb; UserInputService.MouseBehavior = Enum.MouseBehavior.Default end
+        if not UserInputService.MouseIconEnabled then UserInputService.MouseIconEnabled = true end
     end
     if hookmetamethod and checkcaller then
         local old
@@ -101,7 +273,7 @@ do
         end
     end
 end
-Conns[#Conns + 1] = GUI:GetPropertyChangedSignal("Enabled"):Connect(function() UiMouse.setOpen(GUI.Enabled) end)
+Conns[#Conns + 1] = GUI:GetPropertyChangedSignal("Enabled"):Connect(function() if EX.Load.active and GUI.Enabled then GUI.Enabled = false; return end; UiMouse.setOpen(GUI.Enabled) end)
 
 -- UI V19
 local Main = new("Frame", {Size = UDim2.fromOffset(820, 580), Position = UDim2.new(0.5, -410, 0.5, -290), BackgroundColor3 = Theme.bg, Active = true}, GUI)
@@ -110,21 +282,46 @@ local TopBar = new("Frame", {Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 = T
 corner(TopBar, 12)
 new("Frame", {Size = UDim2.new(1, 0, 0, 15), Position = UDim2.new(0, 0, 1, -15), BackgroundColor3 = Theme.panel}, TopBar)
 new("Frame", {Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = Theme.accent}, TopBar)
-label(TopBar, {Size = UDim2.fromOffset(200, 50), Position = UDim2.fromOffset(20, 0), Text = "Drx Hub", Font = Enum.Font.GothamBlack, TextSize = 22, TextColor3 = Theme.accent})
-label(TopBar, {Size = UDim2.fromOffset(200, 50), Position = UDim2.fromOffset(100, 0), Text = "ENTERPRISE", Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Theme.sub})
+label(TopBar, {Size = UDim2.fromOffset(200, 50), Position = UDim2.fromOffset(20, 0), Text = "Eclypse", Font = Enum.Font.GothamBlack, TextSize = 22, TextColor3 = Theme.accent})
+label(TopBar, {Size = UDim2.fromOffset(200, 50), Position = UDim2.fromOffset(140, 0), Text = "ENTERPRISE", Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Theme.sub})
 local closeBtn = new("TextButton", {Size = UDim2.fromOffset(30, 30), Position = UDim2.new(1, -45, 0.5, -15), BackgroundTransparency = 1, Text = "x", Font = Enum.Font.GothamBold, TextSize = 18, TextColor3 = Theme.sub}, TopBar)
 closeBtn.MouseEnter:Connect(function() tween(closeBtn, {TextColor3 = Theme.accent}) end)
 closeBtn.MouseLeave:Connect(function() tween(closeBtn, {TextColor3 = Theme.sub}) end)
 local doUnload
 local Confirm = new("Frame", {Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.4, Active = true, Visible = false, ZIndex = 3000}, Main); corner(Confirm, 12)
 local cbox = new("Frame", {Size = UDim2.fromOffset(360, 160), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), BackgroundColor3 = Theme.panel, ZIndex = 3001}, Confirm); corner(cbox, 10); outline(cbox, 2, Theme.accent)
-label(cbox, {Size = UDim2.new(1, -30, 0, 26), Position = UDim2.fromOffset(15, 16), Text = "Remover o Drx Hub?", Font = Enum.Font.GothamBold, TextSize = 17, ZIndex = 3002})
+label(cbox, {Size = UDim2.new(1, -30, 0, 26), Position = UDim2.fromOffset(15, 16), Text = "Remover o Eclypse?", Font = Enum.Font.GothamBold, TextSize = 17, ZIndex = 3002})
 label(cbox, {Size = UDim2.new(1, -30, 0, 44), Position = UDim2.fromOffset(15, 48), Text = "Isso fecha o menu e desliga todas as funções agora. Para só esconder o menu, use a tecla do menu.", TextSize = 12, TextColor3 = Theme.sub, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 3002})
 local yesBtn = new("TextButton", {Size = UDim2.fromOffset(150, 34), Position = UDim2.new(0, 15, 1, -50), BackgroundColor3 = Theme.accent, Text = "Sim, remover", Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = Theme.text, AutoButtonColor = false, ZIndex = 3002}, cbox); corner(yesBtn, 8)
 local noBtn = new("TextButton", {Size = UDim2.fromOffset(150, 34), Position = UDim2.new(1, -165, 1, -50), BackgroundColor3 = Theme.card, Text = "Cancelar", Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = Theme.text, AutoButtonColor = false, ZIndex = 3002}, cbox); corner(noBtn, 8); outline(noBtn, 1, Theme.stroke)
 yesBtn.MouseButton1Click:Connect(function() if doUnload then doUnload() end end)
 noBtn.MouseButton1Click:Connect(function() Confirm.Visible = false end)
 closeBtn.MouseButton1Click:Connect(function() Confirm.Visible = true end)
+
+
+-- Cartao pequeno acima do hub (nome, Discord, autor); aparece depois do carregamento
+do
+    local B = EX.Brand
+    local card = new("CanvasGroup", {Name = "EclypseInfo", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 0, 44), Size = UDim2.fromOffset(340, 50), BackgroundColor3 = Theme.panel, GroupTransparency = 1, Visible = false, ZIndex = 60}, Main)
+    corner(card, 10); outline(card, 1, Theme.accent)
+    EX.makeLogo(card, 34, {Position = UDim2.fromOffset(10, 8), cut = Theme.panel})
+    label(card, {Size = UDim2.fromOffset(66, 18), Position = UDim2.fromOffset(56, 7), Text = B.name, Font = Enum.Font.GothamBlack, TextSize = 14})
+    label(card, {Size = UDim2.fromOffset(110, 14), Position = UDim2.fromOffset(124, 9), Text = "by " .. B.author, TextSize = 11, TextColor3 = Theme.accent, Font = Enum.Font.GothamBold})
+    label(card, {Size = UDim2.fromOffset(190, 14), Position = UDim2.fromOffset(56, 27), Text = B.discord, TextSize = 11, TextColor3 = Theme.sub})
+    local copy = new("TextButton", {Size = UDim2.fromOffset(62, 24), Position = UDim2.new(1, -72, 0.5, -12), BackgroundColor3 = Theme.accent, Text = "Copiar", Font = Enum.Font.GothamBold, TextSize = 11, TextColor3 = Theme.text, AutoButtonColor = false}, card)
+    corner(copy, 8)
+    copy.MouseButton1Click:Connect(function()
+        local ok = pcall(function() setclipboard(B.invite) end)
+        copy.Text = ok and "Copiado!" or "Sem clip"
+        if not ok and notify then notify(B.name, B.invite) end
+        task.delay(1.4, function() if copy.Parent then copy.Text = "Copiar" end end)
+    end)
+    function EX.revealCard()
+        card.Visible = true
+        TweenService:Create(card, TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(0.5, 0, 0, 10)}):Play()
+        TweenService:Create(card, TweenInfo.new(0.4), {GroupTransparency = 0}):Play()
+    end
+end
 
 local Body = new("Frame", {Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 1, -50), BackgroundTransparency = 1}, Main)
 local Sidebar = new("Frame", {Position = UDim2.fromOffset(15, 15), Size = UDim2.fromOffset(170, 495), BackgroundColor3 = Theme.panel}, Body)
@@ -261,14 +458,22 @@ AddPage("Visuals", function(c1, c2)
     local g3 = CreateGroup(c2, "Tracers"); CreateToggle(g3, "Enable Tracers", "trc_on", false); CreateSlider(g3, "Tracer Width", "trc_width", 1, 10, 2); CreateSlider(g3, "Tracer Lifetime", "trc_life", 1, 10, 5)
 end)
 AddPage("World", function(c1, c2) local g1 = CreateGroup(c1, "Ambiente"); label(g1, {Size = UDim2.new(1, 0, 0, 20), Text = "Em breve...", TextSize = 14, TextColor3 = Theme.sub}) end)
-AddPage("Settings", function(c1, c2)
+AddPage("Configurações", function(c1, c2)
     local g1 = CreateGroup(c1, "Universal Settings"); CreateToggle(g1, "Dynamic Island", "set_island", false); CreateToggle(g1, "Watermark HUD", "set_watermark", true); CreateToggle(g1, "Quick Access Keybind", "set_qaccess", false); CreateToggle(g1, "Mobile Toggle Button", "set_mobile", false); CreateKeybind(g1, "Menu Keybind", "misc_menukey", "RightShift", "Toggle")
     local g2 = CreateGroup(c2, "Screen Ambience"); CreateSlider(g2, "Ambience Opacity", "set_opacity", 10, 100, 50); CreateToggle(g2, "Show Only When UI...", "set_showonly", false)
+    local g3 = CreateGroup(c2, "Cor do Fundo (RGB)"); CreateSlider(g3, "Fundo - Vermelho", "set_bg_r", 0, 160, 0); CreateSlider(g3, "Fundo - Verde", "set_bg_g", 0, 160, 0); CreateSlider(g3, "Fundo - Azul", "set_bg_b", 0, 160, 0)
 end)
-AddNav("Rage"); AddNav("Legit"); AddNav("Misc"); AddNav("Inventory Changer"); AddNav("Visuals"); AddNav("World"); AddNav("Settings"); SwitchPage("Rage")
+AddNav("Rage"); AddNav("Legit"); AddNav("Misc"); AddNav("Inventory Changer"); AddNav("Visuals"); AddNav("World"); AddNav("Configurações"); SwitchPage("Rage")
+EX.step(52, "Loading modules...")
 
 -- ================== ENGINE V21 ==================
-local function guard(name, fn) return function(...) local ok, err = pcall(fn, ...); if not ok and not Warned[name] then Warned[name] = true; warn("[Drx] " .. name .. ": " .. tostring(err)) end end end
+local function guard(name, fn) return function(...)
+    local t0 = os.clock()
+    local ok, err = pcall(fn, ...)
+    local dt = os.clock() - t0
+    if dt > 0.016 then local now = os.clock(); if now - (EX.perfLast[name] or 0) > 1 then EX.perfLast[name] = now; print(string.format("[Eclypse perf] %s levou %.1f ms", name, dt * 1000)) end end
+    if not ok and not Warned[name] then Warned[name] = true; warn("[Eclypse] " .. name .. ": " .. tostring(err)) end
+end end
 local Cap = {mousemoverel = mousemoverel, mouse1click = mouse1click, hookmetamethod = hookmetamethod, newcclosure = newcclosure, checkcaller = checkcaller, getnamecallmethod = getnamecallmethod, setnamecallmethod = setnamecallmethod, getloadedmodules = getloadedmodules, require = require}
 local GameConfig = {Build = "UNSET", Debug = true, Probe = true, Weapon = {ToolModule = nil, Fields = {NoRecoil = nil, NoSpread = nil, InstantReload = nil, InfiniteMagazine = nil, FireCooldown = nil}}, SpectateProbe = nil}
 local Fire = {last = 0}
@@ -449,7 +654,7 @@ local function installSilentHooks()
                 if GameConfig.Probe and not ProbeSeen[self.Name] then
                     ProbeSeen[self.Name] = true
                     local ts = {}; for i = 1, n do ts[i] = typeof(a[i]) end
-                    print("[Drx probe] remote durante disparo: " .. self.Name .. " [" .. cn .. "] (" .. table.concat(ts, ", ") .. ")")
+                    print("[Eclypse probe] remote durante disparo: " .. self.Name .. " [" .. cn .. "] (" .. table.concat(ts, ", ") .. ")")
                 end
                 local cam = Workspace.CurrentCamera; local changed = false
                 if cam then
@@ -470,7 +675,7 @@ local function installSilentHooks()
     end
     local ok = pcall(function() oldNC = Cap.hookmetamethod(game, "__namecall", Cap.newcclosure and Cap.newcclosure(hooked) or hooked) end)
     Silent.hooked = ok and oldNC ~= nil
-    print("[Drx] hook de namecall do Silent: " .. tostring(Silent.hooked))
+    print("[Eclypse] hook de namecall do Silent: " .. tostring(Silent.hooked))
 end
 ensureIndexHook = function()
     if IndexHook.done then return end; IndexHook.done = true
@@ -626,7 +831,7 @@ local function weaponishModule(m)
 end
 local DUMP_PAT = {"fire", "shoot", "shot", "rate", "rpm", "delay", "cool", "interval", "recoil", "spread", "reload", "ammo", "clip", "kick", "bloom"}
 local function dumpWeaponCandidates(tool)
-    print("[Drx] Nada achado automaticamente. Campos numericos candidatos nos modulos ja carregados pelo jogo (cole estas linhas para fixar GameConfig.Weapon):")
+    print("[Eclypse] Nada achado automaticamente. Campos numericos candidatos nos modulos ja carregados pelo jogo (cole estas linhas para fixar GameConfig.Weapon):")
     local shown = 0
     local function consider(path, tbl, depth, visited)
         if visited[tbl] or shown >= 120 then return end; visited[tbl] = true
@@ -700,7 +905,7 @@ local function weaponScanJob(tool, char)
     end
     for _, rule in ipairs(WEAPON_RULES) do
         if get(rule.pref, false) and AutoW.scans >= 2 and not AutoW.found[rule.pref] and not AutoW.warned[rule.pref] then
-            AutoW.warned[rule.pref] = true; warn("[Drx] " .. rule.label .. ": nenhum campo correspondente achado (arma equipada: " .. (tool and tool.Name or "nenhuma/Tool") .. ")")
+            AutoW.warned[rule.pref] = true; warn("[Eclypse] " .. rule.label .. ": nenhum campo correspondente achado (arma equipada: " .. (tool and tool.Name or "nenhuma/Tool") .. ")")
             notify(rule.label, "nada encontrado - veja o console")
             if not AutoW.dumped then AutoW.dumped = true; dumpWeaponCandidates(tool) end
         end
@@ -730,13 +935,13 @@ local function weaponPatchTick()
         task.spawn(function()
             local okc, errc = pcall(weaponScanJob, tool, char)
             AutoW.last = os.clock(); AutoW.busy = false
-            if not okc and not AutoW.warned.job then AutoW.warned.job = true; warn("[Drx] varredura de armas: " .. tostring(errc)) end
+            if not okc and not AutoW.warned.job then AutoW.warned.job = true; warn("[Eclypse] varredura de armas: " .. tostring(errc)) end
         end)
     end
     for i = #AutoW.list, 1, -1 do
         local e = AutoW.list[i]; local on = get(e.rule.pref, false)
         local ok = pcall(function() local want = on and e.rule.value(e.orig) or e.orig; if readRef(e) ~= want then writeRef(e, want) end end)
-        if on and ok and not e.logged then e.logged = true; AutoW.nlog = (AutoW.nlog or 0) + 1; if AutoW.nlog <= 15 then print("[Drx] " .. e.rule.label .. ": " .. e.path .. "  " .. tostring(e.orig) .. " -> " .. tostring(e.rule.value(e.orig)) .. "  (se nada mudar, troque de arma 1/2/3: o jogo pode copiar o valor ao equipar)") end end
+        if on and ok and not e.logged then e.logged = true; AutoW.nlog = (AutoW.nlog or 0) + 1; if AutoW.nlog <= 15 then print("[Eclypse] " .. e.rule.label .. ": " .. e.path .. "  " .. tostring(e.orig) .. " -> " .. tostring(e.rule.value(e.orig)) .. "  (se nada mudar, troque de arma 1/2/3: o jogo pode copiar o valor ao equipar)") end end
         if (not ok) or (not on) then table.remove(AutoW.list, i); local sn = AutoW.seen[e.ref]; if sn then sn[e.key] = nil end end
     end
 end
@@ -835,13 +1040,13 @@ do
     Hud.list = new("Frame", {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 38), Size = UDim2.fromOffset(0, 0), AutomaticSize = Enum.AutomaticSize.XY, BackgroundTransparency = 1, Visible = false}, Overlay); new("UIListLayout", {Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Right}, Hud.list); Hud.lines = {}
     Hud.spec = new("TextLabel", {AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 10, 0.4, 0), Size = UDim2.fromOffset(0, 0), AutomaticSize = Enum.AutomaticSize.XY, BackgroundColor3 = Theme.bg, BackgroundTransparency = 0.15, Text = "", TextSize = 12, Font = Enum.Font.GothamBold, TextColor3 = Theme.text, TextXAlignment = Enum.TextXAlignment.Left, Visible = false}, Overlay); corner(Hud.spec, 6); new("UIPadding", {PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4)}, Hud.spec)
     Hud.toasts = new("Frame", {AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -14, 1, -14), Size = UDim2.fromOffset(210, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1}, Overlay); new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Bottom}, Hud.toasts); Hud.toastN = 0
-    Hud.island = new("Frame", {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.fromOffset(150, 28), BackgroundColor3 = Color3.new(0, 0, 0), Visible = false}, Overlay); corner(Hud.island, 14); Hud.islandText = label(Hud.island, {Size = UDim2.fromScale(1, 1), Text = "Drx Hub", TextSize = 12, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Center}); Hud.islandBusy = 0
+    Hud.island = new("Frame", {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.fromOffset(150, 28), BackgroundColor3 = Color3.new(0, 0, 0), Visible = false}, Overlay); corner(Hud.island, 14); Hud.islandText = label(Hud.island, {Size = UDim2.fromScale(1, 1), Text = "Eclypse", TextSize = 12, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Center}); Hud.islandBusy = 0
     Hud.mobile = new("TextButton", {AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 10, 0.5, 0), Size = UDim2.fromOffset(44, 44), BackgroundColor3 = Theme.panel, Text = "D", Font = Enum.Font.GothamBlack, TextSize = 18, TextColor3 = Theme.accent, AutoButtonColor = false, Visible = false}, Overlay); corner(Hud.mobile, 22); outline(Hud.mobile, 2, Theme.accent); Hud.mobile.MouseButton1Click:Connect(function() GUI.Enabled = not GUI.Enabled end)
     Hud.amb = new("Frame", {Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.accent, BorderSizePixel = 0, ZIndex = 0, Visible = false}, Overlay); Hud.ambGrad = new("UIGradient", {Rotation = 90}, Hud.amb)
 end
 notify = function(title, sub)
     if get("set_island") then
-        local text = title .. (sub and (": " .. sub) or ""); Hud.islandText.Text = text; local w = TextService:GetTextSize(text, 12, Enum.Font.GothamBold, Vector2.new(600, 30)).X + 30; tween(Hud.island, {Size = UDim2.fromOffset(math.max(w, 150), 28)}); Hud.islandBusy = os.clock() + 2
+        local text = title .. (sub and (": " .. sub) or ""); Hud.islandText.Text = text; local w = TextService:GetTextSize(text, 12, Enum.Font.GothamBold, Vector2.new(600, 30)).X + 30; tween(Hud.island, {Size = UDim2.fromOffset(math.max(w, 150), 28)}); Hud.islandBusy = os.clock() + 2; Hud.lastIsl = nil
     else
         Hud.toastN = Hud.toastN + 1; local f = new("Frame", {Size = UDim2.fromOffset(210, 40), BackgroundColor3 = Theme.panel, LayoutOrder = Hud.toastN}, Hud.toasts); corner(f, 8); outline(f, 1, Theme.stroke); new("Frame", {Size = UDim2.fromOffset(3, 24), Position = UDim2.fromOffset(8, 8), BackgroundColor3 = Theme.accent, BorderSizePixel = 0}, f); label(f, {Size = UDim2.new(1, -24, 0, 18), Position = UDim2.fromOffset(18, 4), Text = title, TextSize = 12, Font = Enum.Font.GothamBold}); label(f, {Size = UDim2.new(1, -24, 0, 14), Position = UDim2.fromOffset(18, 22), Text = sub or "", TextSize = 11, TextColor3 = Theme.sub}); Debris:AddItem(f, 2.2)
     end
@@ -849,13 +1054,13 @@ end
 
 local Features = {}
 local function updateHud(fps)
-    Hud.mark.Visible = get("set_watermark", true) and true or false; if Hud.mark.Visible then Hud.markText.Text = string.format("Drx Hub  |  %d fps  |  %d players  |  %s", math.floor(fps + 0.5), #Players:GetPlayers(), os.date("%H:%M")) end
+    Hud.mark.Visible = get("set_watermark", true) and true or false; if Hud.mark.Visible then local mt = string.format("Eclypse  |  %d fps  |  %d players  |  %s", math.floor(fps + 0.5), #Players:GetPlayers(), os.date("%H:%M")); if Hud.lastMark ~= mt then Hud.lastMark = mt; Hud.markText.Text = mt end end
     local showList = get("set_qaccess") and true or false; Hud.list.Visible = showList
     if showList then
         local n = 0; for _, ft in ipairs(Features) do if ft.on() then n = n + 1; local l = Hud.lines[n]; if not l then l = label(Hud.list, {Size = UDim2.fromOffset(0, 14), AutomaticSize = Enum.AutomaticSize.X, Text = "", TextSize = 11, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Right, LayoutOrder = n}); Hud.lines[n] = l end; local txt = ft.name; if ft.bind and Prefs[ft.bind] then local b = Prefs[ft.bind]; if b.Mode ~= "Always" then txt = txt .. "  [" .. tostring(b.Key) .. "]" end; if bindActive(ft.bind) then txt = txt .. "  ENABLED" end end; l.Text = txt; l.LayoutOrder = n; l.Visible = true end end; for i = n + 1, #Hud.lines do Hud.lines[i].Visible = false end
     end
-    Hud.island.Visible = get("set_island") and true or false; if Hud.island.Visible and os.clock() > Hud.islandBusy then local n = 0; for _, ft in ipairs(Features) do if ft.on() then n = n + 1 end end; Hud.islandText.Text = "Drx Hub  |  " .. tostring(n) .. " active"; tween(Hud.island, {Size = UDim2.fromOffset(150, 28)}) end
-    Hud.mobile.Visible = get("set_mobile") and true or false; local op = getNum("set_opacity", 50) / 100; local t = 1 - op * 0.45; Hud.ambGrad.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, t), NumberSequenceKeypoint.new(0.3, 1), NumberSequenceKeypoint.new(0.7, 1), NumberSequenceKeypoint.new(1, t)}); Hud.amb.Visible = (not get("set_showonly")) or GUI.Enabled
+    Hud.island.Visible = get("set_island") and true or false; if Hud.island.Visible and os.clock() > Hud.islandBusy then local n = 0; for _, ft in ipairs(Features) do if ft.on() then n = n + 1 end end; if Hud.lastIsl ~= n then Hud.lastIsl = n; Hud.islandText.Text = "Eclypse  |  " .. tostring(n) .. " active"; tween(Hud.island, {Size = UDim2.fromOffset(150, 28)}) end end
+    Hud.mobile.Visible = get("set_mobile") and true or false; local op = getNum("set_opacity", 50) / 100; local t = 1 - op * 0.45; if Hud.lastT ~= t then Hud.lastT = t; Hud.ambGrad.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, t), NumberSequenceKeypoint.new(0.3, 1), NumberSequenceKeypoint.new(0.7, 1), NumberSequenceKeypoint.new(1, t)}) end; Hud.amb.Visible = (not get("set_showonly")) or GUI.Enabled
 end
 do
     local function esp_any() return get("esp_on", true) and (get("esp_box") or get("esp_name") or get("esp_skel") or get("esp_wpn") or get("esp_health") or get("esp_distance") or get("esp_head") or get("esp_tracers") or get("esp_path")) end
@@ -885,8 +1090,8 @@ local function onHeartbeat(dt)
         else stopFly() end
     else stopFly() end
     if HB.mid >= 0.1 then HB.mid = 0; local active = get("cam_third") and bindActive("cam_key"); if active then local d = getNum("cam_dist", 12); LP.CameraMode = Enum.CameraMode.Classic; LP.CameraMaxZoomDistance = d; LP.CameraMinZoomDistance = d; HB.tp = true elseif HB.tp then HB.tp = false; LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end end
-    if HB.slow >= 0.5 then HB.slow = 0; weaponPatchTick(); local want = get("misc_spect") or get("misc_antispect"); local specs = want and currentSpectators() or {}; if get("misc_spect") and #specs > 0 then Hud.spec.Text = "Spectators\n" .. table.concat(specs, "\n"); Hud.spec.Visible = true else Hud.spec.Visible = false end; local pause = get("misc_antispect") and #specs > 0; if pause ~= HB.paused then HB.paused = pause; notify("Anti Spectate", pause and "features paused" or "features resumed") end end
-    if HB.hud >= 0.2 then HB.hud = 0; updateHud(fpsAvg) end
+    if HB.slow >= 0.5 then HB.slow = 0; EX.timed("weaponPatchTick", weaponPatchTick); local want = get("misc_spect") or get("misc_antispect"); local specs = want and currentSpectators() or {}; if get("misc_spect") and #specs > 0 then Hud.spec.Text = "Spectators\n" .. table.concat(specs, "\n"); Hud.spec.Visible = true else Hud.spec.Visible = false end; local pause = get("misc_antispect") and #specs > 0; if pause ~= HB.paused then HB.paused = pause; notify("Anti Spectate", pause and "features paused" or "features resumed") end end
+    if HB.hud >= 0.2 then HB.hud = 0; EX.timed("updateHud", updateHud, fpsAvg) end
 end
 
 local function makeCircle() local f = new("Frame", {Size = UDim2.fromOffset(100, 100), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, Visible = false}, Overlay); new("UICorner", {CornerRadius = UDim.new(1, 0)}, f); new("UIStroke", {Thickness = 1, Color = Theme.accent}, f); return f end
@@ -924,13 +1129,28 @@ Conns[#Conns + 1] = UserInputService.InputEnded:Connect(function(input) local mk
 TopBar.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true; dragStart = input.Position; startPos = Main.Position end end)
 Conns[#Conns + 1] = UserInputService.InputChanged:Connect(function(input) if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then local d = input.Position - dragStart; Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y) end; if activeSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then if activeSlider.track and activeSlider.track.Parent then local pct = math.clamp((input.Position.X - activeSlider.track.AbsolutePosition.X) / math.max(activeSlider.track.AbsoluteSize.X, 1), 0, 1); activeSlider.update(pct) else activeSlider = nil end end end)
 
+EX.step(88, "Finalizing...")
 local cleaned = false
 local function cleanup()
-    if cleaned then return end; cleaned = true; if shared.DrxCleanup == cleanup then shared.DrxCleanup = nil end; Booted = false; Silent.alive = false; Silent.target = nil; MouseDeltaHook.alive = false; pcall(function() RunService:UnbindFromRenderStep("DrxMain") end); for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end; UiMouse.setOpen(false); UiMouse.alive = false; stopFly(); restoreWeapon(); for k, e in pairs(ESP) do destroyESP(e); ESP[k] = nil end; if HB.tp then pcall(function() LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end) end; Overlay:Destroy(); if GUI.Parent then GUI:Destroy() end
+    if cleaned then return end; cleaned = true; if shared.DrxCleanup == cleanup then shared.DrxCleanup = nil end; Booted = false; if EX.destroyLoading then pcall(EX.destroyLoading) end; Silent.alive = false; Silent.target = nil; MouseDeltaHook.alive = false; pcall(function() RunService:UnbindFromRenderStep("DrxMain") end); for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end; UiMouse.setOpen(false); UiMouse.alive = false; stopFly(); restoreWeapon(); for k, e in pairs(ESP) do destroyESP(e); ESP[k] = nil end; if HB.tp then pcall(function() LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end) end; Overlay:Destroy(); if GUI.Parent then GUI:Destroy() end
 end
 shared.DrxCleanup = cleanup
 doUnload = cleanup
 GUI.Destroying:Connect(cleanup)
 UiMouse.setOpen(GUI.Enabled)
 Booted = true
-print("[Drx Hub V26] pronto | silent-hook=" .. (SilentHooks.done and tostring(Silent.hooked) or "instala ao ligar o Silent") .. " | Build=" .. GameConfig.Build)
+print("[Eclypse V27] pronto | silent-hook=" .. (SilentHooks.done and tostring(Silent.hooked) or "instala ao ligar o Silent") .. " | Build=" .. GameConfig.Build)
+do
+    local L = EX.Load
+    L.target = 100; L.text = "Ready"
+    local waited = 0
+    while not L.ready and waited < 8 do waited = waited + task.wait() end
+    task.wait(0.2)
+    if L.root then pcall(function() TweenService:Create(L.root, TweenInfo.new(0.5), {GroupTransparency = 1}):Play() end) end
+    task.wait(0.55)
+    pcall(EX.destroyLoading)
+    L.active = false
+    pcall(function() GUI.Enabled = true end)
+    task.wait(0.25)
+    if EX.revealCard then pcall(EX.revealCard) end
+end
