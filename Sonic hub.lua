@@ -1,4 +1,4 @@
--- Drx Hub V22 - correção de V21: alvos NPC, ordem de declaração, mira com fallback, armas por descoberta em runtime, confirmação ao fechar
+-- Drx Hub V23 (V22 + mira só em partida) - correção de V21: alvos NPC, ordem de declaração, mira com fallback, armas por descoberta em runtime, confirmação ao fechar
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -383,7 +383,8 @@ local function aimStep(target, alpha)
     local cam = Workspace.CurrentCamera; if not cam then return end
     local v, on = cam:WorldToViewportPoint(target.pos); local vs = cam.ViewportSize
     if on and type(Cap.mousemoverel) == "function" then
-        if pcall(Cap.mousemoverel, (v.X - vs.X / 2) * alpha, (v.Y - vs.Y / 2) * alpha) then return end
+        local dx, dy = (v.X - vs.X / 2) * alpha, (v.Y - vs.Y / 2) * alpha; local mag = math.sqrt(dx * dx + dy * dy); if mag > 80 then dx, dy = dx / mag * 80, dy / mag * 80 end
+        if pcall(Cap.mousemoverel, dx, dy) then return end
     end
     local a = alpha
     if on and MouseDeltaHook.installed then
@@ -787,8 +788,16 @@ local gNPC = guard("npc", initNPCs)
 local rapidLast, bulletLast = 0, 0
 local gRapid = guard("rapid", function() if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then return end; if UserInputService:GetFocusedTextBox() or GUI.Enabled then return end; local now = os.clock(); if get("wpn_rapid") and now - rapidLast > 0.04 then rapidLast = now; clickFire() end; if get("trc_on") and now - bulletLast > 0.1 then bulletLast = now; spawnBulletTracer() end end)
 
+-- Mira só roda em partida: menu fechado, sem caixa de texto, personagem vivo e mouse travado no centro (cursor livre = lobby/menu do jogo)
+local function aimAllowed()
+    if GUI.Enabled or Confirm.Visible then return false end
+    if UserInputService:GetFocusedTextBox() then return false end
+    local c = LP.Character; local h = c and c:FindFirstChildOfClass("Humanoid")
+    if not h or h.Health <= 0 then return false end
+    return UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+end
 pcall(function() RunService:UnbindFromRenderStep("DrxMain") end)
-RunService:BindToRenderStep("DrxMain", Enum.RenderPriority.Camera.Value + 1, function(dt) FrameNo = FrameNo + 1; fpsAvg = fpsAvg + (1 / math.max(dt, 1e-4) - fpsAvg) * 0.05; gPoll(); local cam = Workspace.CurrentCamera; if not cam then return end; if get("aim_on") or get("sil_on") or get("rage_on") or get("trg_on") then gNPC() end; gTrack(); gCircles(cam); if HB.paused then Silent.target = nil else gAim(cam, dt); gSilent(cam, dt); gRage(cam, dt); gKill(cam, dt); gTrig(cam, dt) end; gESP(cam, dt); gRapid() end)
+RunService:BindToRenderStep("DrxMain", Enum.RenderPriority.Camera.Value + 1, function(dt) FrameNo = FrameNo + 1; fpsAvg = fpsAvg + (1 / math.max(dt, 1e-4) - fpsAvg) * 0.05; gPoll(); local cam = Workspace.CurrentCamera; if not cam then return end; if get("aim_on") or get("sil_on") or get("rage_on") or get("trg_on") then gNPC() end; gTrack(); gCircles(cam); if HB.paused or not aimAllowed() then Silent.target = nil; Silent.shooting = false else gAim(cam, dt); gSilent(cam, dt); gRage(cam, dt); gKill(cam, dt); gTrig(cam, dt) end; gESP(cam, dt); gRapid() end)
 Conns[#Conns + 1] = RunService.Heartbeat:Connect(function(dt) gHB(dt) end)
 Conns[#Conns + 1] = LP.Idled:Connect(function() if get("misc_afk") then pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton2(Vector2.new()) end) end end)
 
@@ -808,4 +817,4 @@ doUnload = cleanup
 GUI.Destroying:Connect(cleanup)
 UiMouse.setOpen(GUI.Enabled)
 Booted = true
-print("[Drx Hub V22] pronto | silent-hook=" .. tostring(Silent.hooked) .. " | Build=" .. GameConfig.Build)
+print("[Drx Hub V23] pronto | silent-hook=" .. tostring(Silent.hooked) .. " | Build=" .. GameConfig.Build)
