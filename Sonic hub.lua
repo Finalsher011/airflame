@@ -1,4 +1,4 @@
--- Drx Hub V25 (V24 + varreduras pesadas em thread separada: sem travada ao ligar opcoes) | base: V24 (V23 + hook do silent sem corromper namecall, silent sem depender de janela de tiro, armas por modulos carregados, mira em primeira pessoa) | base: V23 (V22 + mira só em partida) - correção de V21: alvos NPC, ordem de declaração, mira com fallback, armas por descoberta em runtime, confirmação ao fechar
+-- Drx Hub V26 (V25 + hooks sob demanda, namecall com caminho rapido, varredura de armas fatiada) | base: V25 (V24 + varreduras pesadas em thread separada: sem travada ao ligar opcoes) | base: V24 (V23 + hook do silent sem corromper namecall, silent sem depender de janela de tiro, armas por modulos carregados, mira em primeira pessoa) | base: V23 (V22 + mira só em partida) - correção de V21: alvos NPC, ordem de declaração, mira com fallback, armas por descoberta em runtime, confirmação ao fechar
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -275,21 +275,9 @@ local Fire = {last = 0}
 local function clickFire() Fire.last = os.clock(); if type(Cap.mouse1click) == "function" then local ok = pcall(Cap.mouse1click); if ok then return end end; pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new()) end) end
 local function activateTool() Fire.last = os.clock(); local c = LP.Character; local t = c and c:FindFirstChildOfClass("Tool"); if t then pcall(function() t:Activate() end) end end
 
--- Hook no GetMouseDelta para Aimbot funcionar sem mousemoverel
+-- GetMouseDelta (aimbot sem mousemoverel) e Mouse.Hit/Target (silent) usam UM hook de __index, instalado so quando necessario
 local MouseDeltaHook = {installed = false, alive = true, pending = Vector2.new(0, 0)}
-do
-    if Cap.hookmetamethod and Cap.newcclosure and Cap.checkcaller then
-        local oldIdx
-        local function idxHook(self, key)
-            if MouseDeltaHook.alive and oldIdx and self == UserInputService and key == "GetMouseDelta" and not Cap.checkcaller() then
-                local real = oldIdx(self, key)
-                return function(s) local d = real(s); local p = MouseDeltaHook.pending; if p.X ~= 0 or p.Y ~= 0 then MouseDeltaHook.pending = Vector2.new(0, 0) end; return d + p end
-            end
-            return oldIdx(self, key)
-        end
-        local ok = pcall(function() oldIdx = Cap.hookmetamethod(UserInputService, "__index", Cap.newcclosure(idxHook)) end); MouseDeltaHook.installed = ok and oldIdx ~= nil
-    end
-end
+local ensureIndexHook -- definido junto do silent; instala um unico hook de __index sob demanda
 
 local BindState = {}
 local function inputDown(keyName) if keyName == "LMB" then return UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) elseif keyName == "RMB" then return UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) elseif keyName == "MMB" then return UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton3) end; local ok, kc = pcall(function() return Enum.KeyCode[keyName] end); if ok and kc then return UserInputService:IsKeyDown(kc) end; return false end
@@ -397,6 +385,7 @@ local function aimStep(target, alpha)
         if pcall(Cap.mousemoverel, dx, dy) then return end
     end
     local a = alpha
+    if on and not MouseDeltaHook.installed and ensureIndexHook then ensureIndexHook() end
     if on and MouseDeltaHook.installed then
         local p = MouseDeltaHook.pending + Vector2.new((v.X - vs.X / 2) * alpha * 0.5, (v.Y - vs.Y / 2) * alpha * 0.5)
         if p.Magnitude > 150 then p = p.Unit * 150 end
@@ -421,74 +410,91 @@ local function shotWindow() return Silent.shooting or Silent.lmb or (os.clock() 
 local function redirectOK() return shotWindow() or not get("sil_gate", false) end
 Conns[#Conns + 1] = UserInputService.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then Silent.lmb = true; Silent.clickAt = os.clock() end end)
 Conns[#Conns + 1] = UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then Silent.lmb = false; Silent.clickAt = os.clock() end end)
-do
-    if Cap.hookmetamethod and Cap.getnamecallmethod and Cap.checkcaller then
-        local oldNC
-        local setNC = Cap.setnamecallmethod
-        -- Nenhuma chamada com ":" antes de oldNC: ela troca o metodo de namecall que o original le (o tiro viraria IsA/GetFullName).
-        local function pass(self, method, ...)
+local SilentHooks, IndexHook = {done = false}, {done = false}
+local function installSilentHooks()
+    if SilentHooks.done then return end; SilentHooks.done = true
+    if not (Cap.hookmetamethod and Cap.getnamecallmethod and Cap.checkcaller) then return end
+    local oldNC
+    local setNC = Cap.setnamecallmethod
+    -- Caminho rapido primeiro (sem alvo = uma leitura e retorno). Nenhuma chamada com ":" antes de oldNC: ela troca o metodo de namecall que o original le.
+    local function hooked(self, ...)
+        local st = Silent.target
+        if not (st and Silent.alive) then return oldNC(self, ...) end
+        local method = Cap.getnamecallmethod()
+        if Cap.checkcaller() then return oldNC(self, ...) end
+        local n = select("#", ...); local a = {...}
+        if self == Workspace and method == "Raycast" and redirectOK() and typeof(a[1]) == "Vector3" then
+            local to = st.pos - a[1]
+            if to.Magnitude > 0.01 then
+                a[2] = to.Unit * math.max(typeof(a[2]) == "Vector3" and a[2].Magnitude or 1000, to.Magnitude + 1)
+                if setNC then pcall(setNC, method) end
+                return oldNC(self, table.unpack(a, 1, n))
+            end
+        elseif (method == "ViewportPointToRay" or method == "ScreenPointToRay") and redirectOK() and st.vp and type(a[1]) == "number" and typeof(self) == "Instance" and self == Workspace.CurrentCamera then
+            local x, y = st.vp.X, st.vp.Y
+            if method == "ScreenPointToRay" then x, y = x + st.inX, y + st.inY end
             if setNC then pcall(setNC, method) end
-            return oldNC(self, ...)
-        end
-        local function hooked(self, ...)
-            local method = Cap.getnamecallmethod(); local st = Silent.target
-            if Silent.alive and st and not Cap.checkcaller() then
-                local n = select("#", ...); local a = {...}
-                if self == Workspace and method == "Raycast" and redirectOK() and typeof(a[1]) == "Vector3" then
-                    local to = st.pos - a[1]
-                    if to.Magnitude > 0.01 then
-                        a[2] = to.Unit * math.max(typeof(a[2]) == "Vector3" and a[2].Magnitude or 1000, to.Magnitude + 1)
-                        return pass(self, method, table.unpack(a, 1, n))
-                    end
-                elseif (method == "ViewportPointToRay" or method == "ScreenPointToRay") and redirectOK() and st.vp and type(a[1]) == "number" and typeof(self) == "Instance" and self == Workspace.CurrentCamera then
-                    local x, y = st.vp.X, st.vp.Y
-                    if method == "ScreenPointToRay" then x, y = x + st.inX, y + st.inY end
-                    if a[3] ~= nil then return pass(self, method, x, y, a[3]) end
-                    return pass(self, method, x, y)
-                elseif (method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist") and redirectOK() and typeof(a[1]) == "Ray" then
-                    local to = st.pos - a[1].Origin
-                    if to.Magnitude > 0.01 then
-                        a[1] = Ray.new(a[1].Origin, to.Unit * math.max(a[1].Direction.Magnitude, to.Magnitude + 1))
-                        return pass(self, method, table.unpack(a, 1, n))
-                    end
-                elseif (method == "FireServer" or method == "InvokeServer") and shotWindow() and typeof(self) == "Instance" then
-                    local cn = self.ClassName
-                    if cn == "RemoteEvent" or cn == "RemoteFunction" or cn == "UnreliableRemoteEvent" then
-                        if GameConfig.Probe and not ProbeSeen[self.Name] then
-                            ProbeSeen[self.Name] = true
-                            local ts = {}; for i = 1, n do ts[i] = typeof(a[i]) end
-                            print("[Drx probe] remote durante disparo: " .. self.Name .. " [" .. cn .. "] (" .. table.concat(ts, ", ") .. ")")
-                        end
-                        local cam = Workspace.CurrentCamera; local changed = false
-                        if cam then
-                            for i = 1, n do
-                                local arg = a[i]
-                                if typeof(arg) == "CFrame" then a[i] = CFrame.lookAt(arg.Position, st.pos); changed = true
-                                elseif typeof(arg) == "Vector3" and math.abs(arg.Magnitude - 1) < 0.02 then a[i] = (st.pos - cam.CFrame.Position).Unit; changed = true
-                                elseif typeof(arg) == "Ray" then a[i] = Ray.new(arg.Origin, (st.pos - arg.Origin).Unit * math.max(arg.Direction.Magnitude, 1)); changed = true end
-                            end
-                        end
-                        if changed then return pass(self, method, table.unpack(a, 1, n)) end
+            if a[3] ~= nil then return oldNC(self, x, y, a[3]) end
+            return oldNC(self, x, y)
+        elseif (method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist") and redirectOK() and typeof(a[1]) == "Ray" then
+            local to = st.pos - a[1].Origin
+            if to.Magnitude > 0.01 then
+                a[1] = Ray.new(a[1].Origin, to.Unit * math.max(a[1].Direction.Magnitude, to.Magnitude + 1))
+                if setNC then pcall(setNC, method) end
+                return oldNC(self, table.unpack(a, 1, n))
+            end
+        elseif (method == "FireServer" or method == "InvokeServer") and shotWindow() and typeof(self) == "Instance" then
+            local cn = self.ClassName
+            if cn == "RemoteEvent" or cn == "RemoteFunction" or cn == "UnreliableRemoteEvent" then
+                if GameConfig.Probe and not ProbeSeen[self.Name] then
+                    ProbeSeen[self.Name] = true
+                    local ts = {}; for i = 1, n do ts[i] = typeof(a[i]) end
+                    print("[Drx probe] remote durante disparo: " .. self.Name .. " [" .. cn .. "] (" .. table.concat(ts, ", ") .. ")")
+                end
+                local cam = Workspace.CurrentCamera; local changed = false
+                if cam then
+                    for i = 1, n do
+                        local arg = a[i]
+                        if typeof(arg) == "CFrame" then a[i] = CFrame.lookAt(arg.Position, st.pos); changed = true
+                        elseif typeof(arg) == "Vector3" and math.abs(arg.Magnitude - 1) < 0.02 then a[i] = (st.pos - cam.CFrame.Position).Unit; changed = true
+                        elseif typeof(arg) == "Ray" then a[i] = Ray.new(arg.Origin, (st.pos - arg.Origin).Unit * math.max(arg.Direction.Magnitude, 1)); changed = true end
                     end
                 end
+                if changed then
+                    if setNC then pcall(setNC, method) end
+                    return oldNC(self, table.unpack(a, 1, n))
+                end
             end
-            return pass(self, method, ...)
         end
-        local ok = pcall(function() oldNC = Cap.hookmetamethod(game, "__namecall", Cap.newcclosure and Cap.newcclosure(hooked) or hooked) end); Silent.hooked = ok and oldNC ~= nil
+        return oldNC(self, ...)
     end
-    local oldMouseIndex
-    local mouse = LP:GetMouse()
-    local function mouseHook(self, key)
-        if Silent.alive and Silent.target and self == mouse and redirectOK() and not Cap.checkcaller() then
-            if key == "Hit" then return CFrame.new(Silent.target.pos) end
-            if key == "Target" then return Silent.target.char end
-            if key == "UnitRay" then local cam = Workspace.CurrentCamera; if cam then return Ray.new(cam.CFrame.Position, (Silent.target.pos - cam.CFrame.Position).Unit) end end
+    local ok = pcall(function() oldNC = Cap.hookmetamethod(game, "__namecall", Cap.newcclosure and Cap.newcclosure(hooked) or hooked) end)
+    Silent.hooked = ok and oldNC ~= nil
+    print("[Drx] hook de namecall do Silent: " .. tostring(Silent.hooked))
+end
+ensureIndexHook = function()
+    if IndexHook.done then return end; IndexHook.done = true
+    if not (Cap.hookmetamethod and Cap.newcclosure and Cap.checkcaller) then return end
+    local mouse = LP:GetMouse(); local oldIndex
+    local function indexHook(self, key)
+        if key == "Hit" or key == "Target" or key == "UnitRay" then
+            local st = Silent.target
+            if st and Silent.alive and self == mouse and redirectOK() and not Cap.checkcaller() then
+                if key == "Hit" then return CFrame.new(st.pos) end
+                if key == "Target" then return st.char end
+                local cam = Workspace.CurrentCamera; if cam then return Ray.new(cam.CFrame.Position, (st.pos - cam.CFrame.Position).Unit) end
+            end
+        elseif key == "GetMouseDelta" and MouseDeltaHook.alive and self == UserInputService and not Cap.checkcaller() then
+            local real = oldIndex(self, key)
+            return function(s) local d = real(s); local p = MouseDeltaHook.pending; if p.X ~= 0 or p.Y ~= 0 then MouseDeltaHook.pending = Vector2.new(0, 0) end; return d + p end
         end
-        return oldMouseIndex(self, key)
+        return oldIndex(self, key)
     end
-    if Cap.hookmetamethod and mouse then pcall(function() oldMouseIndex = Cap.hookmetamethod(mouse, "__index", Cap.newcclosure and Cap.newcclosure(mouseHook) or mouseHook) end) end
+    local ok = pcall(function() oldIndex = Cap.hookmetamethod(mouse, "__index", Cap.newcclosure(indexHook)) end)
+    MouseDeltaHook.installed = ok and oldIndex ~= nil
 end
 local function runSilent(cam, dt)
+    if get("sil_on") then installSilentHooks(); ensureIndexHook() end
     Silent.target = nil; Silent.shooting = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1); if not (get("sil_on") and bindActive("sil_key")) then return end
     local any = get("sil_any", false); local bone = ({Head = "Head", Torso = "Torso", Root = "Root"})[get("sil_bone", "Head")] or "Head"
     local t = pickTarget({part = bone, radius = any and math.huge or getNum("sil_fov", 120), maxDist = 2000, wall = get("sil_vis", false), prio = any and "Distance" or "Cursor", wc = 1, wd = 0, wf = 0, offscreen = any, predict = false, sample = 90, jitter = 0, teamCheck = get("sil_team", true)})
@@ -548,7 +554,7 @@ local function runTrigger(cam, dt)
 end
 
 local Patched, WeaponWarned = {}, {}
-local AutoW = {list = {}, seen = setmetatable({}, {__mode = "k"}), mods = {}, last = 0, lmLast = 0, scans = 0, found = {}, warned = {}}
+local AutoW = {list = {}, seen = setmetatable({}, {__mode = "k"}), mods = {}, last = 0, lmLast = 0, n = 0, t0 = 0, mask = "", modDone = setmetatable({}, {__mode = "k"}), scans = 0, found = {}, warned = {}}
 -- Regras HEURÍSTICAS por nome de campo (lido do jogo em runtime; nada é hardcoded de build). Valores aplicados: 0 / 999 / slider.
 local WEAPON_RULES = {
     {pref = "wpn_recoil", label = "No Recoil", test = function(k) return k:find("recoil") ~= nil end, value = function() return 0 end},
@@ -558,7 +564,16 @@ local WEAPON_RULES = {
     {pref = "wpn_cd", label = "Custom Fire Cooldown", test = function(k) return k:find("cooldown") ~= nil or k:find("firedelay") ~= nil or k:find("fire_delay") ~= nil or k:find("shootdelay") ~= nil or k:find("shotdelay") ~= nil or k:find("firetime") ~= nil or k:find("timebetween") ~= nil or k:find("fireinterval") ~= nil or k:find("shootinterval") ~= nil or k:find("attackdelay") ~= nil or k == "delay" or k == "cd" end,
         value = function(orig) local ms = getNum("wpn_cdval", 500); if type(orig) == "number" and orig >= 10 then return ms end; return ms / 1000 end},
 }
-local function ruleFor(name) local k = tostring(name):lower(); for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) and r.test(k) then return r end end end
+local RuleKeys, RuleKeysN = {}, 0
+local function ruleFor(name)
+    local k = tostring(name):lower()
+    local hits = RuleKeys[k]
+    if hits == nil then
+        hits = {}; for _, r in ipairs(WEAPON_RULES) do if r.test(k) then hits[#hits + 1] = r end end
+        if RuleKeysN < 20000 then RuleKeys[k] = hits; RuleKeysN = RuleKeysN + 1 end
+    end
+    for i = 1, #hits do if get(hits[i].pref, false) then return hits[i] end end
+end
 local function readRef(e) if e.kind == "attr" then return e.ref:GetAttribute(e.key) elseif e.kind == "val" then return e.ref.Value end; return e.ref[e.key] end
 local function writeRef(e, v) if e.kind == "attr" then e.ref:SetAttribute(e.key, v) elseif e.kind == "val" then e.ref.Value = v else e.ref[e.key] = v end end
 local function addEntry(kind, ref, key, rule, path)
@@ -570,7 +585,10 @@ local function addEntry(kind, ref, key, rule, path)
 end
 local function scanTable(tbl, depth, visited, path)
     if visited[tbl] then return end; visited[tbl] = true
+    local cnt = 0
     for k, v in pairs(tbl) do
+        cnt = cnt + 1; if cnt > 3000 then break end
+        AutoW.n = AutoW.n + 1; if AutoW.n % 200 == 0 and os.clock() - AutoW.t0 > 0.003 then task.wait(); AutoW.t0 = os.clock() end
         if type(k) == "string" then
             if type(v) == "number" then local r = ruleFor(k); if r then addEntry("tbl", tbl, k, r, path .. "." .. k) end
             elseif type(v) == "table" and depth < 2 then scanTable(v, depth + 1, visited, path .. "." .. k) end
@@ -591,12 +609,7 @@ local function scanInstance(root, limit)
 end
 local function modulesNamed(name)
     local key = name:lower()
-    if type(Cap.getloadedmodules) == "function" then
-        local out = {}
-        local ok, mods = pcall(Cap.getloadedmodules)
-        if ok and type(mods) == "table" then for _, d in ipairs(mods) do if typeof(d) == "Instance" and d:IsA("ModuleScript") and d.Name:lower() == key then out[#out + 1] = d end end end
-        return out
-    end
+    if AutoW.byName then return AutoW.byName[key] or {} end
     local c = AutoW.mods[key]; if c then return c end
     c = {}; AutoW.mods[key] = c
     for _, d in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do if d:IsA("ModuleScript") and d.Name:lower() == key then c[#c + 1] = d end end
@@ -618,6 +631,7 @@ local function dumpWeaponCandidates(tool)
     local function consider(path, tbl, depth, visited)
         if visited[tbl] or shown >= 120 then return end; visited[tbl] = true
         for k, v in pairs(tbl) do
+            AutoW.n = AutoW.n + 1; if AutoW.n % 200 == 0 and os.clock() - AutoW.t0 > 0.003 then task.wait(); AutoW.t0 = os.clock() end
             if type(k) == "string" and shown < 120 then
                 if type(v) == "number" then
                     local lk = k:lower()
@@ -647,12 +661,21 @@ local function restoreWeapon()
     for _, e in ipairs(AutoW.list) do pcall(writeRef, e, e.orig) end; AutoW.list = {}
 end
 local function weaponScanJob(tool, char)
-    AutoW.scans = AutoW.scans + 1
-    AutoW.loadedSet = nil
+    AutoW.scans = AutoW.scans + 1; AutoW.t0 = os.clock()
+    AutoW.loadedSet, AutoW.byName = nil, nil
+    local loaded
     if type(Cap.getloadedmodules) == "function" then
         local ok, mods = pcall(Cap.getloadedmodules)
-        if ok and type(mods) == "table" then local s = {}; for _, m in ipairs(mods) do s[m] = true end; AutoW.loadedSet = s end
+        if ok and type(mods) == "table" then
+            loaded = mods; local s, bn = {}, {}
+            for _, m in ipairs(mods) do
+                if typeof(m) == "Instance" then s[m] = true; local k = m.Name:lower(); local l = bn[k]; if not l then l = {}; bn[k] = l end; l[#l + 1] = m end
+            end
+            AutoW.loadedSet, AutoW.byName = s, bn
+        end
     end
+    local mask = ""; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then mask = mask .. r.pref end end
+    if AutoW.mask ~= mask then AutoW.mask = mask; AutoW.modDone = setmetatable({}, {__mode = "k"}) end
     local roots = {}
     if tool then roots[#roots + 1] = tool; for _, m in ipairs(modulesNamed(tool.Name)) do roots[#roots + 1] = m end end
     if char then roots[#roots + 1] = char end
@@ -660,20 +683,19 @@ local function weaponScanJob(tool, char)
     if cam then for _, c in ipairs(cam:GetChildren()) do if c:IsA("Model") then roots[#roots + 1] = c; for _, m in ipairs(modulesNamed(c.Name)) do roots[#roots + 1] = m end end end end
     for _, r in ipairs(roots) do
         if not UiMouse.alive then return end
-        pcall(scanInstance, r, 400); task.wait()
+        pcall(scanInstance, r, 400); task.wait(); AutoW.t0 = os.clock()
     end
-    if type(Cap.getloadedmodules) == "function" and type(Cap.require) == "function" and os.clock() - AutoW.lmLast > 10 then
-        AutoW.lmLast = os.clock()
-        local okm, mods = pcall(Cap.getloadedmodules)
-        if okm and type(mods) == "table" then
-            for i, m in ipairs(mods) do
-                if not UiMouse.alive then return end
-                if typeof(m) == "Instance" and m:IsA("ModuleScript") and weaponishModule(m) then
+    if loaded and type(Cap.require) == "function" then
+        for i, m in ipairs(loaded) do
+            if not UiMouse.alive then return end
+            if typeof(m) == "Instance" and not AutoW.modDone[m] then
+                AutoW.modDone[m] = true
+                if weaponishModule(m) then
                     local ok2, t = pcall(Cap.require, m)
                     if ok2 and type(t) == "table" then pcall(scanTable, t, 0, {}, m:GetFullName()) end
                 end
-                if i % 6 == 0 then task.wait() end
             end
+            if i % 40 == 0 and os.clock() - AutoW.t0 > 0.003 then task.wait(); AutoW.t0 = os.clock() end
         end
     end
     for _, rule in ipairs(WEAPON_RULES) do
@@ -703,7 +725,7 @@ local function weaponPatchTick()
     end
     -- 2) descoberta automática por nome de campo (em thread separada: nunca varre no frame do Heartbeat)
     local anyOn = false; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then anyOn = true end end
-    if anyOn and not AutoW.busy and os.clock() - AutoW.last > 3 then
+    if anyOn and not AutoW.busy and os.clock() - AutoW.last > 5 then
         AutoW.busy = true
         task.spawn(function()
             local okc, errc = pcall(weaponScanJob, tool, char)
@@ -911,4 +933,4 @@ doUnload = cleanup
 GUI.Destroying:Connect(cleanup)
 UiMouse.setOpen(GUI.Enabled)
 Booted = true
-print("[Drx Hub V25] pronto | silent-hook=" .. tostring(Silent.hooked) .. " | Build=" .. GameConfig.Build)
+print("[Drx Hub V26] pronto | silent-hook=" .. (SilentHooks.done and tostring(Silent.hooked) or "instala ao ligar o Silent") .. " | Build=" .. GameConfig.Build)
