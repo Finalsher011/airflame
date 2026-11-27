@@ -1,8 +1,15 @@
--- Drx Hub V20 [COMPLETO] - UI V19 + Engine Corrigida + Cursor Livre + Hooks de Mouse/Raycast
-local Players, UserInputService, TweenService, Workspace = game:GetService("Players"), game:GetService("UserInputService"), game:GetService("TweenService"), game:GetService("Workspace")
-local VirtualUser, RunService, ContextActionService = game:GetService("VirtualUser"), game:GetService("RunService"), game:GetService("ContextActionService")
-local Debris, TextService = game:GetService("Debris"), game:GetService("TextService")
-local LP, PlayerGui = Players.LocalPlayer, Players.LocalPlayer:WaitForChild("PlayerGui")
+-- Drx Hub V21 [ULTIMATE ENGINE] - UI V19 + Todos os hooks de tiro (Raycast, Mouse, RemoteEvents) + Cursor Livre
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser")
+local RunService = game:GetService("RunService")
+local ContextActionService = game:GetService("ContextActionService")
+local Debris = game:GetService("Debris")
+local TextService = game:GetService("TextService")
+local LP = Players.LocalPlayer
+local PlayerGui = LP:WaitForChild("PlayerGui")
 
 if shared.DrxCleanup then pcall(shared.DrxCleanup) end
 for _, n in ipairs({"DrxHub", "DrxOverlay", "DrxMouseModal"}) do
@@ -12,15 +19,27 @@ end
 
 local Prefs, Labels, BindNames, Conns, Warned = {}, {}, {}, {}, {}
 local Booted, notify = false, nil
-local function set(k, v) local old = Prefs[k]; Prefs[k] = v; if Booted and type(v) == "boolean" and old ~= v and Labels[k] then notify(Labels[k], v and "enabled" or "disabled") end end
+local function set(k, v)
+    local old = Prefs[k]; Prefs[k] = v
+    if Booted and type(v) == "boolean" and old ~= v and Labels[k] then notify(Labels[k], v and "enabled" or "disabled") end
+end
 local function get(k, d) local v = Prefs[k]; if v == nil then return d end; return v end
 local function getNum(k, d) local v = tonumber(get(k, d)); if not v or v ~= v then return d end; return v end
 
-local Theme = {bg = Color3.fromRGB(18, 12, 14), panel = Color3.fromRGB(28, 18, 22), card = Color3.fromRGB(38, 24, 30), text = Color3.fromRGB(255, 255, 255), sub = Color3.fromRGB(150, 130, 140), accent = Color3.fromRGB(255, 40, 60), stroke = Color3.fromRGB(60, 35, 45), track = Color3.fromRGB(45, 30, 35)}
+local Theme = {
+    bg = Color3.fromRGB(18, 12, 14), panel = Color3.fromRGB(28, 18, 22), card = Color3.fromRGB(38, 24, 30),
+    text = Color3.fromRGB(255, 255, 255), sub = Color3.fromRGB(150, 130, 140), accent = Color3.fromRGB(255, 40, 60),
+    stroke = Color3.fromRGB(60, 35, 45), track = Color3.fromRGB(45, 30, 35),
+}
 local function new(cls, props, parent) local i = Instance.new(cls); for k, v in pairs(props) do i[k] = v end; if parent then i.Parent = parent end; return i end
 local function corner(i, r) return new("UICorner", {CornerRadius = UDim.new(0, r)}, i) end
 local function outline(i, t, c) return new("UIStroke", {Color = c or Theme.stroke, Thickness = t or 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, i) end
-local function label(parent, props) props.BackgroundTransparency = 1; props.Font = props.Font or Enum.Font.Gotham; props.TextColor3 = props.TextColor3 or Theme.text; props.TextSize = props.TextSize or 14; props.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Left; return new("TextLabel", props, parent) end
+local function label(parent, props)
+    props.BackgroundTransparency = 1; props.Font = props.Font or Enum.Font.Gotham
+    props.TextColor3 = props.TextColor3 or Theme.text; props.TextSize = props.TextSize or 14
+    props.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Left
+    return new("TextLabel", props, parent)
+end
 local TWEEN = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 local function tween(i, p) TweenService:Create(i, TWEEN, p):Play() end
 
@@ -32,46 +51,77 @@ local UiMouse = {open = false, saved = nil, wanted = nil, wantedIcon = nil, moda
 do
     local ACTION_SINK, STEP_NAME = "DrxUiMouseSink", "DrxUiMouseUnlock"
     local function sink() return Enum.ContextActionResult.Sink end
-    local function enforce() if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then UiMouse.wanted = UserInputService.MouseBehavior end; UserInputService.MouseBehavior = Enum.MouseBehavior.Default; UserInputService.MouseIconEnabled = true end
+    local function enforce()
+        if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then UiMouse.wanted = UserInputService.MouseBehavior end
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        UserInputService.MouseIconEnabled = true
+    end
     if hookmetamethod and checkcaller then
         local old
-        local function hook(self, k, v) if UiMouse.alive and UiMouse.open and self == UserInputService and not checkcaller() then if k == "MouseBehavior" then UiMouse.wanted = v; return end; if k == "MouseIconEnabled" then UiMouse.wantedIcon = v; return end end; return old(self, k, v) end
-        local ok = pcall(function() old = hookmetamethod(game, "__newindex", newcclosure and newcclosure(hook) or hook) end); UiMouse.hooked = ok and old ~= nil
+        local function hook(self, k, v)
+            if UiMouse.alive and UiMouse.open and self == UserInputService and not checkcaller() then
+                if k == "MouseBehavior" then UiMouse.wanted = v; return end
+                if k == "MouseIconEnabled" then UiMouse.wantedIcon = v; return end
+            end
+            return old(self, k, v)
+        end
+        local ok = pcall(function() old = hookmetamethod(game, "__newindex", newcclosure and newcclosure(hook) or hook) end)
+        UiMouse.hooked = ok and old ~= nil
     end
     function UiMouse.setOpen(open)
-        open = open and true or false; if open == UiMouse.open then return end; UiMouse.open = open
+        open = open and true or false
+        if open == UiMouse.open then return end
+        UiMouse.open = open
         if open then
-            UiMouse.saved = {behavior = UserInputService.MouseBehavior, icon = UserInputService.MouseIconEnabled}; UiMouse.wanted, UiMouse.wantedIcon = nil, nil
-            local g = Instance.new("ScreenGui"); g.Name = "DrxMouseModal"; g.ResetOnSpawn = false; g.IgnoreGuiInset = true; g.DisplayOrder = 1
-            local b = Instance.new("TextButton"); b.Modal = true; b.BackgroundTransparency = 1; b.Text = ""; b.Size = UDim2.fromScale(1, 1); b.Active = true; b.Parent = g; g.Parent = PlayerGui; UiMouse.modal = g
+            UiMouse.saved = {behavior = UserInputService.MouseBehavior, icon = UserInputService.MouseIconEnabled}
+            UiMouse.wanted, UiMouse.wantedIcon = nil, nil
+            local g = Instance.new("ScreenGui")
+            g.Name = "DrxMouseModal"; g.ResetOnSpawn = false; g.IgnoreGuiInset = true; g.DisplayOrder = 1
+            local b = Instance.new("TextButton")
+            b.Modal = true; b.BackgroundTransparency = 1; b.Text = ""; b.Size = UDim2.fromScale(1, 1); b.Active = true; b.Parent = g
+            g.Parent = PlayerGui
+            UiMouse.modal = g
             ContextActionService:BindActionAtPriority(ACTION_SINK, sink, false, Enum.ContextActionPriority.High.Value + 1000, Enum.UserInputType.MouseButton1, Enum.UserInputType.MouseButton2, Enum.UserInputType.MouseWheel)
-            RunService:BindToRenderStep(STEP_NAME, Enum.RenderPriority.Last.Value, enforce); UiMouse.hbConn = RunService.Heartbeat:Connect(enforce); enforce()
+            RunService:BindToRenderStep(STEP_NAME, Enum.RenderPriority.Last.Value, enforce)
+            UiMouse.hbConn = RunService.Heartbeat:Connect(enforce)
+            enforce()
         else
-            pcall(function() RunService:UnbindFromRenderStep(STEP_NAME) end); pcall(function() ContextActionService:UnbindAction(ACTION_SINK) end)
-            if UiMouse.hbConn then UiMouse.hbConn:Disconnect(); UiMouse.hbConn = nil end; if UiMouse.modal then UiMouse.modal:Destroy(); UiMouse.modal = nil end
-            local sv = UiMouse.saved; UiMouse.saved = nil; local beh, icon = UiMouse.wanted, UiMouse.wantedIcon; UiMouse.wanted, UiMouse.wantedIcon = nil, nil
-            if beh == nil and sv then beh = sv.behavior end; if icon == nil and sv then icon = sv.icon end
-            if icon ~= nil then UserInputService.MouseIconEnabled = icon end; if beh ~= nil then UserInputService.MouseBehavior = beh end
+            pcall(function() RunService:UnbindFromRenderStep(STEP_NAME) end)
+            pcall(function() ContextActionService:UnbindAction(ACTION_SINK) end)
+            if UiMouse.hbConn then UiMouse.hbConn:Disconnect(); UiMouse.hbConn = nil end
+            if UiMouse.modal then UiMouse.modal:Destroy(); UiMouse.modal = nil end
+            local sv = UiMouse.saved; UiMouse.saved = nil
+            local beh, icon = UiMouse.wanted, UiMouse.wantedIcon
+            UiMouse.wanted, UiMouse.wantedIcon = nil, nil
+            if beh == nil and sv then beh = sv.behavior end
+            if icon == nil and sv then icon = sv.icon end
+            if icon ~= nil then UserInputService.MouseIconEnabled = icon end
+            if beh ~= nil then UserInputService.MouseBehavior = beh end
         end
     end
 end
 Conns[#Conns + 1] = GUI:GetPropertyChangedSignal("Enabled"):Connect(function() UiMouse.setOpen(GUI.Enabled) end)
 
--- UI V19 (INTACTA)
-local Main = new("Frame", {Size = UDim2.fromOffset(820, 580), Position = UDim2.new(0.5, -410, 0.5, -290), BackgroundColor3 = Theme.bg, Active = true}, GUI); corner(Main, 12); outline(Main, 2, Theme.accent)
-local TopBar = new("Frame", {Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 = Theme.panel}, Main); corner(TopBar, 12)
+-- UI V19
+local Main = new("Frame", {Size = UDim2.fromOffset(820, 580), Position = UDim2.new(0.5, -410, 0.5, -290), BackgroundColor3 = Theme.bg, Active = true}, GUI)
+corner(Main, 12); outline(Main, 2, Theme.accent)
+local TopBar = new("Frame", {Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 = Theme.panel}, Main)
+corner(TopBar, 12)
 new("Frame", {Size = UDim2.new(1, 0, 0, 15), Position = UDim2.new(0, 0, 1, -15), BackgroundColor3 = Theme.panel}, TopBar)
 new("Frame", {Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = Theme.accent}, TopBar)
 label(TopBar, {Size = UDim2.fromOffset(200, 50), Position = UDim2.fromOffset(20, 0), Text = "Drx Hub", Font = Enum.Font.GothamBlack, TextSize = 22, TextColor3 = Theme.accent})
 label(TopBar, {Size = UDim2.fromOffset(200, 50), Position = UDim2.fromOffset(100, 0), Text = "ENTERPRISE", Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Theme.sub})
 local closeBtn = new("TextButton", {Size = UDim2.fromOffset(30, 30), Position = UDim2.new(1, -45, 0.5, -15), BackgroundTransparency = 1, Text = "x", Font = Enum.Font.GothamBold, TextSize = 18, TextColor3 = Theme.sub}, TopBar)
-closeBtn.MouseEnter:Connect(function() tween(closeBtn, {TextColor3 = Theme.accent}) end); closeBtn.MouseLeave:Connect(function() tween(closeBtn, {TextColor3 = Theme.sub}) end)
+closeBtn.MouseEnter:Connect(function() tween(closeBtn, {TextColor3 = Theme.accent}) end)
+closeBtn.MouseLeave:Connect(function() tween(closeBtn, {TextColor3 = Theme.sub}) end)
 closeBtn.MouseButton1Click:Connect(function() GUI.Enabled = false end)
 
 local Body = new("Frame", {Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 1, -50), BackgroundTransparency = 1}, Main)
-local Sidebar = new("Frame", {Position = UDim2.fromOffset(15, 15), Size = UDim2.fromOffset(170, 495), BackgroundColor3 = Theme.panel}, Body); corner(Sidebar, 10); outline(Sidebar, 1, Theme.stroke)
+local Sidebar = new("Frame", {Position = UDim2.fromOffset(15, 15), Size = UDim2.fromOffset(170, 495), BackgroundColor3 = Theme.panel}, Body)
+corner(Sidebar, 10); outline(Sidebar, 1, Theme.stroke)
 local NavList = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 0}, Sidebar)
-new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, NavList); new("UIPadding", {PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)}, NavList)
+new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, NavList)
+new("UIPadding", {PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)}, NavList)
 local ContentArea = new("Frame", {Position = UDim2.fromOffset(200, 15), Size = UDim2.fromOffset(605, 495), BackgroundTransparency = 1}, Body)
 local PageContainer = new("Frame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1}, ContentArea)
 local activeSlider = nil
@@ -83,20 +133,25 @@ local function CreateGroup(parent, title)
     local line = new("Frame", {Size = UDim2.fromOffset(3, 14), Position = UDim2.fromOffset(0, 3), BackgroundColor3 = Theme.accent}, head); corner(line, 1)
     label(head, {Size = UDim2.new(1, -10, 1, 0), Position = UDim2.fromOffset(10, 0), Text = title, Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = Theme.accent})
     local body = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 2}, g)
-    new("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, body); return body
+    new("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, body)
+    return body
 end
 local function CreateToggle(parent, name, key, default)
     Prefs[key] = Prefs[key] or default; Labels[key] = name
-    local row = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = Theme.card}, parent); corner(row, 8); outline(row, 1, Theme.stroke)
+    local row = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = Theme.card}, parent)
+    corner(row, 8); outline(row, 1, Theme.stroke)
     label(row, {Size = UDim2.new(1, -60, 1, 0), Position = UDim2.fromOffset(12, 0), Text = name, TextSize = 13, Font = Enum.Font.GothamBold})
-    local sw = new("TextButton", {Size = UDim2.new(0, 36, 0, 20), Position = UDim2.new(1, -48, 0.5, -10), BackgroundColor3 = Theme.track, Text = "", AutoButtonColor = false}, row); corner(sw, 10)
+    local sw = new("TextButton", {Size = UDim2.new(0, 36, 0, 20), Position = UDim2.new(1, -48, 0.5, -10), BackgroundColor3 = Theme.track, Text = "", AutoButtonColor = false}, row)
+    corner(sw, 10)
     local knob = new("Frame", {Size = UDim2.fromOffset(14, 14), Position = UDim2.fromOffset(3, 3), BackgroundColor3 = Theme.sub}, sw); corner(knob, 7)
     local function render() local on = get(key); tween(sw, {BackgroundColor3 = on and Theme.accent or Theme.track}); tween(knob, {Position = on and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3), BackgroundColor3 = on and Theme.text or Theme.sub}) end
-    sw.MouseButton1Click:Connect(function() set(key, not get(key)); render() end); render()
+    sw.MouseButton1Click:Connect(function() set(key, not get(key)); render() end)
+    render()
 end
 local function CreateSlider(parent, name, key, min, max, default)
     Prefs[key] = Prefs[key] or default
-    local row = new("Frame", {Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 = Theme.card}, parent); corner(row, 8); outline(row, 1, Theme.stroke)
+    local row = new("Frame", {Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 = Theme.card}, parent)
+    corner(row, 8); outline(row, 1, Theme.stroke)
     label(row, {Size = UDim2.new(1, -80, 0, 20), Position = UDim2.fromOffset(12, 8), Text = name, TextSize = 13, Font = Enum.Font.GothamBold})
     local minus = new("TextButton", {Size = UDim2.fromOffset(20, 20), Position = UDim2.new(1, -80, 0, 8), BackgroundColor3 = Theme.panel, Text = "-", TextColor3 = Theme.text, TextSize = 14, AutoButtonColor = false}, row); corner(minus, 4)
     local valLbl = label(row, {Size = UDim2.fromOffset(40, 20), Position = UDim2.new(1, -55, 0, 8), Text = tostring(get(key)), TextSize = 12, TextXAlignment = Enum.TextXAlignment.Center})
@@ -113,23 +168,29 @@ local function CreateSlider(parent, name, key, min, max, default)
 end
 local function CreateDropdown(parent, name, key, options, default)
     Prefs[key] = Prefs[key] or default
-    local row = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = Theme.card}, parent); corner(row, 8); outline(row, 1, Theme.stroke)
+    local row = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = Theme.card}, parent)
+    corner(row, 8); outline(row, 1, Theme.stroke)
     label(row, {Size = UDim2.new(1, -60, 1, 0), Position = UDim2.fromOffset(12, 0), Text = name, TextSize = 13, Font = Enum.Font.GothamBold})
-    local btn = new("TextButton", {Size = UDim2.new(0, 100, 0, 24), Position = UDim2.new(1, -112, 0.5, -12), BackgroundColor3 = Theme.panel, Text = "", AutoButtonColor = false}, row); corner(btn, 6); outline(btn, 1, Theme.stroke)
+    local btn = new("TextButton", {Size = UDim2.new(0, 100, 0, 24), Position = UDim2.new(1, -112, 0.5, -12), BackgroundColor3 = Theme.panel, Text = "", AutoButtonColor = false}, row)
+    corner(btn, 6); outline(btn, 1, Theme.stroke)
     local txt = label(btn, {Size = UDim2.new(1, -20, 1, 0), Position = UDim2.fromOffset(8, 0), Text = tostring(get(key)), TextSize = 12})
-    local list = new("Frame", {Size = UDim2.new(0, 100, 0, #options * 24), Position = UDim2.new(1, -112, 1, 4), BackgroundColor3 = Theme.panel, Visible = false, ZIndex = 999}, row); corner(list, 6); outline(list, 1, Theme.stroke)
+    local list = new("Frame", {Size = UDim2.new(0, 100, 0, #options * 24), Position = UDim2.new(1, -112, 1, 4), BackgroundColor3 = Theme.panel, Visible = false, ZIndex = 999}, row)
+    corner(list, 6); outline(list, 1, Theme.stroke)
     for i, opt in ipairs(options) do
         local b = new("TextButton", {Size = UDim2.new(1, 0, 0, 24), Position = UDim2.fromOffset(0, (i - 1) * 24), BackgroundTransparency = 1, Text = opt, TextSize = 12, TextColor3 = Theme.sub, ZIndex = 1000}, list)
-        b.MouseEnter:Connect(function() b.TextColor3 = Theme.text end); b.MouseLeave:Connect(function() b.TextColor3 = Theme.sub end)
+        b.MouseEnter:Connect(function() b.TextColor3 = Theme.text end)
+        b.MouseLeave:Connect(function() b.TextColor3 = Theme.sub end)
         b.MouseButton1Click:Connect(function() set(key, opt); txt.Text = opt; list.Visible = false end)
     end
     btn.MouseButton1Click:Connect(function() list.Visible = not list.Visible end)
 end
 local function CreateKeybind(parent, name, key, defaultKey, defaultMode)
     Prefs[key] = Prefs[key] or {Key = defaultKey, Mode = defaultMode}; BindNames[key] = name
-    local row = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = Theme.card}, parent); corner(row, 8); outline(row, 1, Theme.stroke)
+    local row = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = Theme.card}, parent)
+    corner(row, 8); outline(row, 1, Theme.stroke)
     label(row, {Size = UDim2.new(1, -120, 1, 0), Position = UDim2.fromOffset(12, 0), Text = name, TextSize = 13, Font = Enum.Font.GothamBold})
-    local container = new("Frame", {Size = UDim2.new(0, 100, 0, 24), Position = UDim2.new(1, -112, 0.5, -12), BackgroundColor3 = Theme.panel}, row); corner(container, 6); outline(container, 1, Theme.stroke)
+    local container = new("Frame", {Size = UDim2.new(0, 100, 0, 24), Position = UDim2.new(1, -112, 0.5, -12), BackgroundColor3 = Theme.panel}, row)
+    corner(container, 6); outline(container, 1, Theme.stroke)
     local btnKey = new("TextButton", {Size = UDim2.new(0.5, 0, 1, 0), BackgroundTransparency = 1, Text = tostring(get(key).Key), TextSize = 12, TextColor3 = Theme.text}, container)
     local btnMode = new("TextButton", {Size = UDim2.new(0.5, 0, 1, 0), Position = UDim2.new(0.5, 0, 0, 0), BackgroundTransparency = 1, Text = tostring(get(key).Mode), TextSize = 10, TextColor3 = Theme.sub}, container)
     btnMode.MouseButton1Click:Connect(function() local modes = {"Always", "Hold", "Toggle"}; local curr = get(key).Mode; local nextMode = modes[1]; for i, m in ipairs(modes) do if m == curr then nextMode = modes[(i % #modes) + 1] break end end; set(key, {Key = get(key).Key, Mode = nextMode}); btnMode.Text = nextMode end)
@@ -138,22 +199,29 @@ end
 local Pages, NavButtons = {}, {}
 local function AddPage(name, buildFunc)
     local page = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 4, ScrollBarImageColor3 = Theme.accent, Visible = false, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(0,0,0,0)}, PageContainer)
-    local grid = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1}, page); new("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 15), SortOrder = Enum.SortOrder.LayoutOrder}, grid)
-    local col1 = new("Frame", {Size = UDim2.new(0.5, -8, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 1}, grid); new("UIListLayout", {Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder}, col1)
-    local col2 = new("Frame", {Size = UDim2.new(0.5, -8, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 2}, grid); new("UIListLayout", {Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder}, col2)
-    Pages[name] = page; buildFunc(col1, col2)
+    local grid = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1}, page)
+    new("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 15), SortOrder = Enum.SortOrder.LayoutOrder}, grid)
+    local col1 = new("Frame", {Size = UDim2.new(0.5, -8, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 1}, grid)
+    new("UIListLayout", {Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder}, col1)
+    local col2 = new("Frame", {Size = UDim2.new(0.5, -8, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 2}, grid)
+    new("UIListLayout", {Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder}, col2)
+    Pages[name] = page
+    buildFunc(col1, col2)
 end
 local function SwitchPage(name)
-    activeSlider = nil; for n, p in pairs(Pages) do p.Visible = (n == name) end
+    activeSlider = nil
+    for n, p in pairs(Pages) do p.Visible = (n == name) end
     for n, b in pairs(NavButtons) do local sel = (n == name); tween(b.bg, {BackgroundColor3 = sel and Theme.accent or Theme.panel}); tween(b.txt, {TextColor3 = sel and Theme.text or Theme.sub}) end
 end
 local function AddNav(name)
-    local btn = new("TextButton", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = Theme.panel, Text = "", AutoButtonColor = false}, NavList); corner(btn, 8); outline(btn, 1, Theme.stroke)
+    local btn = new("TextButton", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = Theme.panel, Text = "", AutoButtonColor = false}, NavList)
+    corner(btn, 8); outline(btn, 1, Theme.stroke)
     local txt = label(btn, {Size = UDim2.new(1, -30, 1, 0), Position = UDim2.fromOffset(30, 0), Text = name, TextSize = 14, TextColor3 = Theme.sub, Font = Enum.Font.GothamBold})
     local ind = new("Frame", {Size = UDim2.fromOffset(16, 16), Position = UDim2.fromOffset(10, 12), BackgroundColor3 = Theme.sub}, btn); corner(ind, 4)
     btn.MouseEnter:Connect(function() if Pages[name] and not Pages[name].Visible then tween(btn, {BackgroundColor3 = Theme.card}) end end)
     btn.MouseLeave:Connect(function() if Pages[name] and not Pages[name].Visible then tween(btn, {BackgroundColor3 = Theme.panel}) end end)
-    NavButtons[name] = {bg = btn, txt = txt, ind = ind}; btn.MouseButton1Click:Connect(function() SwitchPage(name) end)
+    NavButtons[name] = {bg = btn, txt = txt, ind = ind}
+    btn.MouseButton1Click:Connect(function() SwitchPage(name) end)
 end
 
 AddPage("Rage", function(c1, c2)
@@ -189,13 +257,14 @@ AddPage("Settings", function(c1, c2)
 end)
 AddNav("Rage"); AddNav("Legit"); AddNav("Misc"); AddNav("Inventory Changer"); AddNav("Visuals"); AddNav("World"); AddNav("Settings"); SwitchPage("Rage")
 
--- ENGINE V20
+-- ================== ENGINE V21 ==================
 local function guard(name, fn) return function(...) local ok, err = pcall(fn, ...); if not ok and not Warned[name] then Warned[name] = true; warn("[Drx] " .. name .. ": " .. tostring(err)) end end end
 local Cap = {mousemoverel = mousemoverel, mouse1click = mouse1click, hookmetamethod = hookmetamethod, newcclosure = newcclosure, checkcaller = checkcaller, getnamecallmethod = getnamecallmethod, require = require}
 local GameConfig = {Build = "UNSET", Debug = true, Probe = true, Weapon = {ToolModule = nil, Fields = {NoRecoil = nil, NoSpread = nil, InstantReload = nil, InfiniteMagazine = nil, FireCooldown = nil}}, SpectateProbe = nil}
 local function clickFire() if type(Cap.mouse1click) == "function" then local ok = pcall(Cap.mouse1click); if ok then return end end; pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new()) end) end
 local function activateTool() local c = LP.Character; local t = c and c:FindFirstChildOfClass("Tool"); if t then pcall(function() t:Activate() end) end end
 
+-- Hook no GetMouseDelta para Aimbot funcionar sem mousemoverel
 local MouseDeltaHook = {installed = false, pending = Vector2.new(0, 0)}
 do
     if Cap.hookmetamethod and Cap.newcclosure and Cap.checkcaller then
@@ -316,18 +385,63 @@ do
         local oldNC
         local function hooked(self, ...)
             local method = Cap.getnamecallmethod(); local st = Silent.target
-            if Silent.alive and st and self == Workspace and not Cap.checkcaller() then
+            if Silent.alive and st and not Cap.checkcaller() then
                 local n = select("#", ...); local a = {...}
-                if method == "Raycast" and typeof(a[1]) == "Vector3" and typeof(a[2]) == "Vector3" then local to = st.pos - a[1]; if to.Magnitude > 0.01 then a[2] = to.Unit * math.max(a[2].Magnitude, to.Magnitude + 1); if not get("sil_vis", false) then local rp = RaycastParams.new(); rp.FilterType = Enum.RaycastFilterType.Include; rp.FilterDescendantsInstances = {st.char}; a[3] = rp; n = math.max(n, 3) end; return oldNC(self, table.unpack(a, 1, n)) end
-                elseif (method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist") and typeof(a[1]) == "Ray" then local to = st.pos - a[1].Origin; if to.Magnitude > 0.01 then a[1] = Ray.new(a[1].Origin, to.Unit * math.max(a[1].Direction.Magnitude, to.Magnitude + 1)); return oldNC(self, table.unpack(a, 1, n)) end end
+                -- Hook Raycast
+                if (self == Workspace or self == Workspace.CurrentCamera) and (method == "Raycast" or method == "ViewportPointToRay" or method == "ScreenPointToRay") then
+                    if typeof(a[1]) == "Vector3" then
+                        local to = st.pos - a[1]
+                        if to.Magnitude > 0.01 then a[2] = to.Unit * math.max(typeof(a[2]) == "Vector3" and a[2].Magnitude or 1000, to.Magnitude + 1); return oldNC(self, table.unpack(a, 1, n)) end
+                    elseif typeof(a[1]) == "Vector2" then -- ScreenPointToRay(x,y)
+                        local cam = Workspace.CurrentCamera
+                        if cam then
+                            local ray = cam:ScreenPointToRay(a[1].X, a[1].Y)
+                            local to = st.pos - ray.Origin
+                            local newV = cam:WorldToViewportPoint(st.pos)
+                            if newV.Z > 0 then return oldNC(self, newV.X, newV.Y) end
+                        end
+                    end
+                end
+                -- Hook FindPartOnRay
+                if (method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist") and typeof(a[1]) == "Ray" then
+                    local to = st.pos - a[1].Origin
+                    if to.Magnitude > 0.01 then a[1] = Ray.new(a[1].Origin, to.Unit * math.max(a[1].Direction.Magnitude, to.Magnitude + 1)); return oldNC(self, table.unpack(a, 1, n)) end
+                end
+                -- Hook Remotes (FireServer/InvokeServer) - Se o jogo manda um CFrame ou Vector3 para o servidor
+                if (method == "FireServer" or method == "InvokeServer") and self:IsA("RemoteEvent") then
+                    local cam = Workspace.CurrentCamera
+                    if cam then
+                        for i, arg in ipairs(a) do
+                            if typeof(arg) == "CFrame" then
+                                -- Muda o CFrame para apontar pro inimigo
+                                a[i] = CFrame.lookAt(arg.Position, st.pos)
+                            elseif typeof(arg) == "Vector3" then
+                                -- Muda a direção (Vector3)
+                                a[i] = (st.pos - cam.CFrame.Position).Unit
+                            elseif typeof(arg) == "Ray" then
+                                a[i] = Ray.new(arg.Origin, (st.pos - arg.Origin).Unit)
+                            end
+                        end
+                        return oldNC(self, table.unpack(a, 1, n))
+                    end
+                end
             end
             return oldNC(self, ...)
         end
         local ok = pcall(function() oldNC = Cap.hookmetamethod(game, "__namecall", Cap.newcclosure and Cap.newcclosure(hooked) or hooked) end); Silent.hooked = ok and oldNC ~= nil
     end
+    -- Hook Mouse.Hit e Mouse.UnitRay
     local oldMouseIndex
-    local function mouseHook(self, key) if Silent.alive and Silent.target and not Cap.checkcaller() then if key == "Hit" then return CFrame.new(Silent.target.pos) end; if key == "UnitRay" then local cam = Workspace.CurrentCamera; if cam then return Ray.new(cam.CFrame.Position, (Silent.target.pos - cam.CFrame.Position).Unit) end end end; return oldMouseIndex(self, key) end
-    local mouse = LP:GetMouse(); if Cap.hookmetamethod and mouse then pcall(function() oldMouseIndex = Cap.hookmetamethod(mouse, "__index", Cap.newcclosure and Cap.newcclosure(mouseHook) or mouseHook) end) end
+    local function mouseHook(self, key) 
+        if Silent.alive and Silent.target and not Cap.checkcaller() then 
+            if key == "Hit" then return CFrame.new(Silent.target.pos) end
+            if key == "Target" then return Silent.target.char end
+            if key == "UnitRay" then local cam = Workspace.CurrentCamera; if cam then return Ray.new(cam.CFrame.Position, (Silent.target.pos - cam.CFrame.Position).Unit) end end
+        end
+        return oldMouseIndex(self, key) 
+    end
+    local mouse = LP:GetMouse()
+    if Cap.hookmetamethod and mouse then pcall(function() oldMouseIndex = Cap.hookmetamethod(mouse, "__index", Cap.newcclosure and Cap.newcclosure(mouseHook) or mouseHook) end) end
 end
 local function runSilent(cam, dt)
     Silent.target = nil; if not (get("sil_on") and bindActive("sil_key")) then return end
@@ -570,4 +684,4 @@ shared.DrxCleanup = cleanup
 GUI.Destroying:Connect(cleanup)
 UiMouse.setOpen(GUI.Enabled)
 Booted = true
-print("[Drx Hub V20] pronto | silent-hook=" .. tostring(Silent.hooked) .. " | Build=" .. GameConfig.Build)
+print("[Drx Hub V21] pronto | silent-hook=" .. tostring(Silent.hooked) .. " | Build=" .. GameConfig.Build)
