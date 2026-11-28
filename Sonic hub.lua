@@ -1,8 +1,9 @@
--- Eclypse V35 (base: V33; sem mexer na UI: removido hook de __newindex que dava "attempt to call a nil value", gate da mira relaxado, entidades genericas, lineClear sem falso bloqueio, aimStep com fallback de camera, clique via VirtualInputManager, scan de armas via getgc, diagnostico GameConfig.Debug) | base V33 | clickFire agora tenta Tool:Activate antes do clique falso, clique falso mirado no centro da tela (nao mais 0,0), log de qual caminho disparou o tiro
+-- Eclypse V31 (base: V30) | novo: perfis por jogo, ESP (team check + fallback sem Humanoid), Weapons sem varredura continua, Bots com fallback, Noclip, Skins/Gun Skins, Settings com temas animados/idioma/escala/autoload | V30: animacoes (toast, troca de aba, hover, dropdown), abas Hitbox/Bots/Safety, configuracoes completas, menos carga por frame. Historico V29: | logo da foto do usuario (PNG transparente, 3 niveis de carregamento), cor do menu configuravel, efeitos ao abrir, otimizacoes de desempenho (cache de visibilidade, mira a 30Hz, ESP a 100Hz, profiler)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser")
 local RunService = game:GetService("RunService")
 local ContextActionService = game:GetService("ContextActionService")
 local Debris = game:GetService("Debris")
@@ -82,6 +83,7 @@ function EX.applyAccent()
     sweep(PlayerGui:FindFirstChild("DrxHub")); sweep(PlayerGui:FindFirstChild("DrxOverlay"))
 end
 EX.prefHook = function(k)
+    if type(k) == "string" and EX.v31Hook then EX.v31Hook(k) end
     if EX.styleToggle and type(k) == "string" and k:sub(1, 7) == "set_tgl" then EX.styleToggle() end
     if (k == "set_acc_preset" or k == "set_acc_r" or k == "set_acc_g" or k == "set_acc_b") and not EX.accPending then
         EX.accPending = true
@@ -90,13 +92,6 @@ EX.prefHook = function(k)
     if (k == "set_bg_r" or k == "set_bg_g" or k == "set_bg_b") and not EX.bgPending then
         EX.bgPending = true
         task.delay(0.05, function() EX.bgPending = false; pcall(EX.applyBackground) end)
-    end
-    if k == "set_visual_theme" and not EX.themePending then
-        EX.themePending = true
-        task.delay(0.06, function()
-            EX.themePending = false
-            pcall(EX.applyVisualTheme, get("set_visual_theme", "Halloween"))
-        end)
     end
 end
 function EX.timed(name, fn, ...)
@@ -338,16 +333,27 @@ do
         local mb = UserInputService.MouseBehavior
         if mb ~= Enum.MouseBehavior.Default then if not UiMouse.hooked then UiMouse.guess = mb end; UserInputService.MouseBehavior = Enum.MouseBehavior.Default end
         if not UserInputService.MouseIconEnabled then UserInputService.MouseIconEnabled = true end
+        if UserInputService.MouseIcon ~= "" then UserInputService.MouseIcon = "" end
     end
-    -- V35: hook de __newindex em `game` removido. Rodava no carregamento; se o executor o ativava antes de devolver o original (ou devolvia nil),
-    -- toda escrita de propriedade do jogo chamava `old` nil ("attempt to call a nil value"). enforce() ja guarda em UiMouse.guess o MouseBehavior
-    -- que o jogo escreveu, e e isso que se restaura ao fechar o menu.
+    if hookmetamethod and checkcaller then
+        local old
+        local function hook(self, k, v)
+            if UiMouse.alive and UiMouse.open and self == UserInputService and not checkcaller() then
+                if k == "MouseBehavior" then UiMouse.wanted = v; return end
+                if k == "MouseIconEnabled" then UiMouse.wantedIcon = v; return end
+                if k == "MouseIcon" then UiMouse.wantedImg = v; return end
+            end
+            return old(self, k, v)
+        end
+        local ok = pcall(function() old = hookmetamethod(game, "__newindex", newcclosure and newcclosure(hook) or hook) end)
+        UiMouse.hooked = ok and old ~= nil
+    end
     function UiMouse.setOpen(open)
         open = open and true or false
         if open == UiMouse.open then return end
         UiMouse.open = open
         if open then
-            UiMouse.saved = {behavior = UserInputService.MouseBehavior, icon = UserInputService.MouseIconEnabled}
+            UiMouse.saved = {behavior = UserInputService.MouseBehavior, icon = UserInputService.MouseIconEnabled, img = UserInputService.MouseIcon}; UiMouse.wantedImg = nil
             UiMouse.wanted, UiMouse.wantedIcon, UiMouse.guess = nil, nil, nil
             local g = Instance.new("ScreenGui")
             g.Name = "DrxMouseModal"; g.ResetOnSpawn = false; g.IgnoreGuiInset = true; g.DisplayOrder = 1
@@ -375,6 +381,8 @@ do
             if icon == nil and sv then icon = sv.icon end
             if icon == false and not match then icon = true end
             if icon ~= nil then UserInputService.MouseIconEnabled = icon end
+            local imgRestore = UiMouse.wantedImg; UiMouse.wantedImg = nil; if imgRestore == nil and sv then imgRestore = sv.img end
+            if imgRestore ~= nil then pcall(function() UserInputService.MouseIcon = imgRestore end) end
             if beh ~= nil then UserInputService.MouseBehavior = beh end
         end
     end
@@ -389,7 +397,7 @@ corner(TopBar, 12)
 new("Frame", {Size = UDim2.new(1, 0, 0, 15), Position = UDim2.new(0, 0, 1, -15), BackgroundColor3 = Theme.panel}, TopBar)
 new("Frame", {Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = Theme.accent}, TopBar)
 EX.makeLogo(TopBar, 44, {Position = UDim2.fromOffset(12, 3), cut = Theme.panel, ZIndex = 2})
-label(TopBar, {Size = UDim2.fromOffset(200, 50), Position = UDim2.fromOffset(96, 0), Text = "ENTERPRISE  V30", Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Theme.sub})
+label(TopBar, {Size = UDim2.fromOffset(200, 50), Position = UDim2.fromOffset(96, 0), Text = "ENTERPRISE  V31", Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Theme.sub})
 local closeBtn = new("TextButton", {Size = UDim2.fromOffset(30, 30), Position = UDim2.new(1, -45, 0.5, -15), BackgroundTransparency = 1, Text = "x", Font = Enum.Font.GothamBold, TextSize = 18, TextColor3 = Theme.sub}, TopBar)
 closeBtn.MouseEnter:Connect(function() tween(closeBtn, {TextColor3 = Theme.accent}) end)
 closeBtn.MouseLeave:Connect(function() tween(closeBtn, {TextColor3 = Theme.sub}) end)
@@ -474,12 +482,9 @@ end
 local Body = new("Frame", {Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 1, -50), BackgroundTransparency = 1}, Main)
 local Sidebar = new("Frame", {Position = UDim2.fromOffset(15, 15), Size = UDim2.fromOffset(170, 495), BackgroundColor3 = Theme.panel}, Body)
 corner(Sidebar, 10); outline(Sidebar, 1, Theme.stroke)
-local NavList = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, -48), BackgroundTransparency = 1, ScrollBarThickness = 0, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new()}, Sidebar)
+local NavList = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 0, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new()}, Sidebar)
 new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, NavList)
 new("UIPadding", {PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)}, NavList)
-local ThemeNavFooter = new("Frame", {Name = "ThemeNavFooter", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0), Size = UDim2.new(1, 0, 0, 44), BackgroundColor3 = Theme.panel, BackgroundTransparency = 0.08, BorderSizePixel = 0, ClipsDescendants = true}, Sidebar)
-local ThemeNavFooterLine = new("Frame", {Name = "FooterAccent", Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = Theme.accent, BorderSizePixel = 0}, ThemeNavFooter)
-local ThemeNavFooterTitle = label(ThemeNavFooter, {Name = "FooterLabel", Size = UDim2.new(1, -12, 0, 12), Position = UDim2.fromOffset(8, 5), Text = "ECLYPSE  •  THEMES", TextSize = 8, Font = Enum.Font.GothamBold, TextColor3 = Theme.sub, TextXAlignment = Enum.TextXAlignment.Center})
 local ContentArea = new("Frame", {Position = UDim2.fromOffset(200, 15), Size = UDim2.fromOffset(605, 495), BackgroundTransparency = 1}, Body)
 local PageContainer = new("Frame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1}, ContentArea)
 local activeSlider = nil
@@ -667,10 +672,945 @@ local function AddNav(name)
     btn.MouseButton1Click:Connect(function() SwitchPage(name) end)
 end
 
+do
+-- ===== V31: perfis por jogo, deteccao, presets, dumps =====
+-- Campos de perfil nil = UNSET (nao inventado). placeIds vazio = UNSET. Preencha com o que o seu proprio dump (Game > Copy PlaceId) mostrar.
+EX.Games = {
+    {id = "bloxstrike", label = "BloxStrike", placeIds = {}, namePatterns = {"bloxstrike", "blox strike"}, scriptUrl = nil, resolveCharacter = nil, teamOf = nil, skins = nil,
+        preset = {esp_on = true, esp_box = true, esp_name = true, esp_health = true, esp_skel = true, esp_distance = true, esp_team = true, esp_npc = true}},
+    {id = "umtoque", label = "[FPS] Um Toque", placeIds = {}, namePatterns = {"um toque"}, scriptUrl = nil, resolveCharacter = nil, teamOf = nil, skins = nil,
+        preset = {esp_on = true, esp_box = true, esp_name = true, esp_health = true, esp_team = true, esp_npc = true}},
+    {id = "droparena", label = "FPS Arena de Drop", placeIds = {}, namePatterns = {"arena de drop"}, scriptUrl = nil, resolveCharacter = nil, teamOf = nil, skins = nil,
+        preset = {esp_on = true, esp_box = true, esp_name = true, esp_health = true, esp_team = true, esp_npc = true}},
+}
+EX.GenericPreset = {esp_on = true, esp_box = true, esp_name = true, esp_health = true, esp_team = true, esp_npc = true}
+EX.GameLabels = {"Auto"}
+for _, g in ipairs(EX.Games) do EX.GameLabels[#EX.GameLabels + 1] = g.label end
+EX.Game = {name = nil, source = "none"}
+EX.Profile = nil
+
+local function matchProfile()
+    local ov = get("game_override", "Auto")
+    if ov ~= "Auto" then for _, g in ipairs(EX.Games) do if g.label == ov then return g, "manual override" end end end
+    for _, g in ipairs(EX.Games) do for _, id in ipairs(g.placeIds) do if id == game.PlaceId or id == game.GameId then return g, "PlaceId/GameId" end end end
+    local nm = tostring(EX.Game.name or ""):lower()
+    if nm ~= "" then for _, g in ipairs(EX.Games) do for _, p in ipairs(g.namePatterns) do if nm:find(p, 1, true) then return g, "product name" end end end end
+    return nil, "none"
+end
+function EX.detectGame()
+    local prev = EX.Profile
+    EX.Profile, EX.Game.source = matchProfile()
+    if EX.Profile ~= prev and Booted and EX.Profile and notify then notify("Game", "profile: " .. EX.Profile.label) end
+end
+task.spawn(function()
+    local ok, info = pcall(function() return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId) end)
+    if ok and type(info) == "table" and type(info.Name) == "string" then EX.Game.name = info.Name end
+    EX.detectGame()
+end)
+function EX.profileStatus()
+    local P = EX.Profile
+    local head = string.format("PlaceId %s | GameId %s | name: %s", tostring(game.PlaceId), tostring(game.GameId), tostring(EX.Game.name or "(lookup pending/failed)"))
+    if not P then return head .. "\nNo profile matched. Pick one under Profile or add this PlaceId to EX.Games." end
+    local function st(v) return (v ~= nil) and "set" or "UNSET" end
+    return string.format("%s\nProfile: %s (matched by %s)\nplaceIds: %s | scriptUrl: %s | resolveCharacter: %s | teamOf: %s | skins.apply: %s", head, P.label, EX.Game.source, (#P.placeIds > 0) and "set" or "UNSET", st(P.scriptUrl), st(P.resolveCharacter), st(P.teamOf), st(P.skins and P.skins.apply))
+end
+function EX.applyPreset()
+    local tbl = (EX.Profile and EX.Profile.preset) or EX.GenericPreset
+    local n = 0
+    for k, v in pairs(tbl) do
+        if Prefs[k] ~= nil and type(Prefs[k]) == type(v) then set(k, v); n = n + 1; if EX.Refresh[k] then pcall(EX.Refresh[k]) end end
+    end
+    notify("Preset", (EX.Profile and EX.Profile.label or "generic") .. ": " .. n .. " options set")
+end
+function EX.runGameScript()
+    local P = EX.Profile
+    if not P then notify("Game", "no profile for this game"); return end
+    if type(P.scriptUrl) ~= "string" or P.scriptUrl == "" then notify("Game", P.label .. ": scriptUrl is UNSET"); return end
+    local okG, src = pcall(function() return game:HttpGet(P.scriptUrl) end)
+    if not okG or type(src) ~= "string" or #src == 0 then notify("Game", "download failed"); return end
+    local fn, err = loadstring(src)
+    if not fn then notify("Game", "script error, see console"); warn("[Eclypse] " .. tostring(err)); return end
+    local okR, e2 = pcall(fn)
+    if not okR then warn("[Eclypse] game script: " .. tostring(e2)); notify("Game", "script failed, see console") else notify("Game", P.label .. " script executed") end
+end
+function EX.emit(text, what)
+    print(text)
+    local ok = type(setclipboard) == "function" and pcall(setclipboard, text)
+    notify(what or "Dump", ok and "printed (F9) and copied to clipboard" or "printed to console (F9)")
+end
+local function dumpTree(inst, depth, maxDepth, lines, limit)
+    if #lines >= limit then return end
+    local attrs = {}; for k, v in pairs(inst:GetAttributes()) do attrs[#attrs + 1] = k .. "=" .. tostring(v) end
+    lines[#lines + 1] = string.rep("  ", depth) .. inst.Name .. " [" .. inst.ClassName .. "]" .. (#attrs > 0 and (" {" .. table.concat(attrs, ", ") .. "}") or "")
+    if depth < maxDepth then for _, c in ipairs(inst:GetChildren()) do dumpTree(c, depth + 1, maxDepth, lines, limit) end end
+end
+function EX.dumpViewmodel()
+    local lines = {"[Eclypse dump] PlaceId " .. tostring(game.PlaceId) .. " | Camera children (depth 3)"}
+    local cam = Workspace.CurrentCamera
+    if cam then for _, c in ipairs(cam:GetChildren()) do dumpTree(c, 1, 3, lines, 350) end end
+    lines[#lines + 1] = "Character tools (depth 3):"
+    local ch = LP.Character; if ch then for _, c in ipairs(ch:GetChildren()) do if c:IsA("Tool") then dumpTree(c, 1, 3, lines, 550) end end end
+    lines[#lines + 1] = "Backpack (depth 2):"
+    local bp = LP:FindFirstChildOfClass("Backpack"); if bp then for _, c in ipairs(bp:GetChildren()) do dumpTree(c, 1, 2, lines, 650) end end
+    EX.emit(table.concat(lines, "\n"), "Viewmodel dump")
+end
+function EX.dumpChars()
+    local lines = {"[Eclypse dump] Workspace top level (first 150) + players"}
+    local n = 0
+    for _, c in ipairs(Workspace:GetChildren()) do
+        n = n + 1; if n > 150 then break end
+        lines[#lines + 1] = string.format("  %s [%s] children=%d humanoid=%s", c.Name, c.ClassName, #c:GetChildren(), tostring(c:FindFirstChildOfClass("Humanoid") ~= nil))
+    end
+    for _, p in ipairs(Players:GetPlayers()) do
+        local c = p.Character
+        lines[#lines + 1] = string.format("  PLAYER %s | Team=%s | Character=%s", p.Name, tostring(p.Team and p.Team.Name), c and c:GetFullName() or "nil")
+    end
+    EX.emit(table.concat(lines, "\n"), "Workspace dump")
+end
+EX.pending = {}
+local function defer(key, fn, delay)
+    if EX.pending[key] then return end; EX.pending[key] = true
+    task.delay(delay or 0.05, function() EX.pending[key] = nil; pcall(fn) end)
+end
+function EX.v31Hook(k)
+    if k == "set_theme" then defer("theme", function() EX.applyTheme() end, 0.02)
+    elseif k == "set_lang" then defer("lang", function() EX.applyLanguage() end, 0.02)
+    elseif k == "set_uiscale" then defer("scale", function() EX.applyScale() end, 0.03)
+    elseif k == "set_fx" or k == "set_particles" then defer("fx", function() EX.fxRefresh() end, 0.05)
+    elseif k == "game_override" then defer("game", function() EX.detectGame() end, 0.05)
+    elseif k:sub(1, 5) == "skin_" then defer("skin", function() EX.skinApply() end, 0.15) end
+end
+end
+
+do
+-- ===== V31: dropdown com busca =====
+function EX.SearchDD(parent, name, key, options, default, onPick)
+    Prefs[key] = Prefs[key] or default
+    local rowH = 56
+    local holder = new("Frame", {Size = UDim2.new(1, 0, 0, rowH), BackgroundTransparency = 1}, parent)
+    label(holder, {Size = UDim2.new(1, 0, 0, 16), Text = name, TextSize = 12, Font = Enum.Font.GothamBold})
+    local btn = new("TextButton", {Size = UDim2.new(1, 0, 0, 32), Position = UDim2.fromOffset(0, 20), BackgroundColor3 = Theme.card, Text = "", AutoButtonColor = false}, holder)
+    corner(btn, 8); outline(btn, 1, Theme.stroke)
+    local txt = label(btn, {Size = UDim2.new(1, -44, 1, 0), Position = UDim2.fromOffset(12, 0), Text = tostring(get(key)), TextSize = 12, TextTruncate = Enum.TextTruncate.AtEnd})
+    local chip = new("Frame", {Size = UDim2.fromOffset(24, 22), Position = UDim2.new(1, -30, 0.5, -11), BackgroundColor3 = Theme.accent}, btn); corner(chip, 6)
+    local arrow = label(chip, {Size = UDim2.fromScale(1, 1), Text = "v", TextSize = 11, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Center})
+    local shown = math.min(#options, 6)
+    local panelH = shown * 26 + 46
+    local panel = new("Frame", {Size = UDim2.new(1, 0, 0, 0), Position = UDim2.fromOffset(0, rowH), BackgroundColor3 = Theme.panel, Visible = false, ZIndex = 999, ClipsDescendants = true}, holder)
+    corner(panel, 8); outline(panel, 1, Theme.stroke)
+    local search = new("TextBox", {Size = UDim2.new(1, -16, 0, 26), Position = UDim2.fromOffset(8, 6), BackgroundColor3 = Theme.card, Text = "", PlaceholderText = "Search...", PlaceholderColor3 = Theme.sub, TextColor3 = Theme.text, TextSize = 12, Font = Enum.Font.Gotham, ClearTextOnFocus = false, ZIndex = 1000, TextXAlignment = Enum.TextXAlignment.Left}, panel)
+    corner(search, 6); outline(search, 1, Theme.stroke); new("UIPadding", {PaddingLeft = UDim.new(0, 8)}, search)
+    local list = new("ScrollingFrame", {Size = UDim2.new(1, -8, 1, -40), Position = UDim2.fromOffset(4, 38), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = Theme.accent, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), ZIndex = 1000}, panel)
+    new("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder}, list)
+    local buttons = {}
+    local function mark()
+        for o, b in pairs(buttons) do
+            local sel = (o == get(key)); b.BackgroundTransparency = sel and 0 or 1; b.TextColor3 = sel and Theme.text or Theme.sub
+        end
+    end
+    local isOpen = false
+    local function setOpen(v)
+        if v and EX.openDD and EX.openDD.fn ~= setOpen then EX.openDD.fn(false) end
+        isOpen = v; arrow.Text = v and "^" or "v"
+        if v then
+            panel.Visible = true; panel.Size = UDim2.new(1, 0, 0, 0)
+            TweenService:Create(panel, TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, panelH)}):Play()
+            EX.openDD = {fn = setOpen}
+        else
+            panel.Visible = false; search.Text = ""
+            if EX.openDD and EX.openDD.fn == setOpen then EX.openDD = nil end
+        end
+    end
+    for i, o in ipairs(options) do
+        local b = new("TextButton", {Size = UDim2.new(1, -4, 0, 26), BackgroundColor3 = Theme.accent, BackgroundTransparency = 1, Text = o, TextXAlignment = Enum.TextXAlignment.Left, TextSize = 12, Font = Enum.Font.Gotham, TextColor3 = Theme.sub, AutoButtonColor = false, ZIndex = 1001, LayoutOrder = i}, list)
+        corner(b, 5); new("UIPadding", {PaddingLeft = UDim.new(0, 8)}, b)
+        buttons[o] = b
+        b.MouseButton1Click:Connect(function() set(key, o); txt.Text = o; mark(); setOpen(false); if onPick then pcall(onPick, o) end end)
+    end
+    search:GetPropertyChangedSignal("Text"):Connect(function()
+        local q = search.Text:lower()
+        for o, b in pairs(buttons) do b.Visible = (q == "") or (o:lower():find(q, 1, true) ~= nil) end
+    end)
+    btn.MouseButton1Click:Connect(function() setOpen(not isOpen) end)
+    mark()
+    EX.Refresh[key] = function() txt.Text = tostring(get(key)); mark() end
+    return holder
+end
+
+-- ===== V31: temas animados =====
+local function C3(r, g, b) return Color3.fromRGB(r, g, b) end
+local function PAL(bg, panel, card, track, stroke, text, sub, accent)
+    return {bg = C3(table.unpack(bg)), panel = C3(table.unpack(panel)), card = C3(table.unpack(card)), track = C3(table.unpack(track)), stroke = C3(table.unpack(stroke)), text = C3(table.unpack(text)), sub = C3(table.unpack(sub)), accent = C3(table.unpack(accent))}
+end
+EX.Themes = {
+    {name = "Eclypse", pal = PAL({0, 0, 0}, {10, 10, 10}, {18, 18, 18}, {32, 32, 32}, {44, 44, 44}, {255, 255, 255}, {150, 150, 160}, {255, 40, 60}),
+        fx = {border = "pulse", glow = {pos = "bottom", col = C3(255, 40, 60), base = 0.72, amp = 0.08, speed = 1.4},
+            em = {{n = 14, shape = "circle", size = {2, 4}, col = {C3(255, 60, 80), C3(255, 130, 140)}, tr = {0.45, 0.8}, vx = {-0.01, 0.01}, vy = {-0.12, -0.04}, twinkle = 1.6}}}},
+    {name = "Overworld", pal = PAL({150, 190, 240}, {196, 128, 86}, {252, 246, 230}, {222, 208, 178}, {70, 45, 30}, {48, 32, 26}, {110, 86, 72}, {222, 52, 48}),
+        fx = {strip = {col = C3(96, 186, 72), edge = C3(70, 140, 52)}, orb = {col = C3(255, 214, 90), size = 54, x = 0.88, y = 0.13, speed = 1.3},
+            em = {{n = 5, shape = "cloud", size = {70, 120}, col = {C3(255, 255, 255)}, tr = {0.1, 0.3}, vx = {0.008, 0.02}, vy = {0, 0}, y = {0.02, 0.5}},
+                {n = 7, shape = "diamond", size = {5, 8}, col = {C3(255, 205, 60)}, tr = {0.1, 0.4}, vx = {-0.004, 0.004}, vy = {-0.06, -0.025}, spin = 90, twinkle = 3}}}},
+    {name = "Halloween", pal = PAL({22, 10, 30}, {34, 16, 44}, {46, 24, 58}, {64, 36, 78}, {110, 60, 20}, {255, 236, 214}, {190, 150, 120}, {255, 120, 20}),
+        fx = {border = "flicker", orb = {col = C3(255, 232, 160), size = 50, x = 0.88, y = 0.14, speed = 0.9},
+            em = {{n = 3, shape = "diamond", size = {10, 14}, col = {C3(10, 4, 16)}, tr = {0.1, 0.25}, vx = {0.05, 0.09}, vy = {0, 0}, y = {0.08, 0.45}, sway = {0.01, 2}, flap = 9},
+                {n = 16, shape = "circle", size = {2, 4}, col = {C3(255, 140, 30), C3(255, 190, 60)}, tr = {0.2, 0.6}, vx = {-0.01, 0.01}, vy = {-0.1, -0.04}, twinkle = 4},
+                {n = 2, shape = "bar", fullWidth = true, h = 0.16, col = {C3(150, 110, 190)}, tr = {0.9, 0.95}, y = {0.55, 0.85}, bob = 0.5, sw = {0.3, 0.6}}}}},
+    {name = "Light", pal = PAL({236, 238, 244}, {222, 226, 236}, {255, 255, 255}, {206, 210, 222}, {196, 200, 214}, {28, 30, 40}, {100, 106, 124}, {64, 120, 255}),
+        fx = {sweep = true,
+            em = {{n = 12, shape = "circle", size = {10, 26}, col = {C3(120, 170, 255), C3(255, 170, 210), C3(160, 230, 200)}, tr = {0.8, 0.92}, vx = {-0.006, 0.006}, vy = {-0.03, -0.012}, sway = {0.01, 0.8}}}}},
+    {name = "Dark", pal = PAL({10, 12, 18}, {16, 19, 28}, {24, 28, 40}, {40, 46, 62}, {52, 58, 78}, {240, 244, 255}, {140, 150, 175}, {110, 130, 255}),
+        fx = {border = "pulse", glow = {pos = "top", col = C3(110, 130, 255), base = 0.8, amp = 0.08, speed = 0.8},
+            em = {{n = 26, shape = "circle", size = {1, 3}, col = {C3(255, 255, 255), C3(170, 190, 255)}, tr = {0.2, 0.7}, vx = {-0.004, 0.004}, vy = {-0.006, 0.006}, twinkle = 2.5}}}},
+    {name = "Underground", pal = PAL({14, 22, 30}, {20, 34, 44}, {28, 46, 58}, {44, 70, 86}, {60, 96, 112}, {220, 245, 250}, {130, 170, 184}, {60, 220, 200}),
+        fx = {glow = {pos = "bottom", col = C3(40, 200, 190), base = 0.74, amp = 0.06, speed = 1.0},
+            em = {{n = 16, shape = "circle", size = {3, 9}, col = {C3(120, 235, 225)}, tr = {0.6, 0.85}, vx = {-0.004, 0.004}, vy = {-0.1, -0.04}, sway = {0.012, 1.6}},
+                {n = 8, shape = "diamond", size = {6, 10}, col = {C3(110, 240, 255), C3(160, 255, 220)}, tr = {0.2, 0.6}, vx = {-0.003, 0.003}, vy = {-0.01, 0.01}, spin = 20, twinkle = 2}}}},
+    {name = "Castle", pal = PAL({26, 20, 22}, {40, 28, 28}, {54, 38, 36}, {74, 52, 48}, {120, 70, 40}, {255, 238, 226}, {186, 150, 132}, {255, 90, 30}),
+        fx = {border = "flicker", glow = {pos = "bottom", col = C3(255, 90, 30), base = 0.6, amp = 0.14, speed = 3.2},
+            em = {{n = 22, shape = "circle", size = {2, 5}, col = {C3(255, 120, 30), C3(255, 200, 70)}, tr = {0.2, 0.6}, vx = {-0.006, 0.006}, vy = {-0.16, -0.06}, sway = {0.012, 2}, twinkle = 5}}}},
+    {name = "Ghost House", pal = PAL({18, 20, 34}, {28, 30, 50}, {40, 44, 70}, {58, 62, 96}, {90, 96, 140}, {232, 236, 255}, {150, 156, 196}, {150, 120, 255}),
+        fx = {border = "pulse",
+            em = {{n = 7, shape = "circle", size = {26, 48}, col = {C3(255, 255, 255), C3(210, 200, 255)}, tr = {0.86, 0.95}, vx = {-0.01, 0.01}, vy = {-0.03, -0.01}, sway = {0.03, 0.5}},
+                {n = 8, shape = "circle", size = {8, 13}, col = {C3(235, 235, 255)}, tr = {0.5, 0.8}, vx = {-0.012, 0.012}, vy = {-0.02, 0.01}, sway = {0.02, 1.2}, twinkle = 1.5},
+                {n = 2, shape = "bar", fullWidth = true, h = 0.14, col = {C3(190, 180, 255)}, tr = {0.9, 0.95}, y = {0.6, 0.9}, bob = 0.4, sw = {0.2, 0.5}}}}},
+    {name = "Star Road", pal = PAL({8, 6, 26}, {18, 12, 48}, {28, 20, 70}, {46, 34, 100}, {90, 70, 170}, {255, 246, 214}, {176, 160, 220}, {255, 206, 64}),
+        fx = {border = "rainbow", glow = {pos = "top", col = C3(150, 90, 255), base = 0.78, amp = 0.08, speed = 0.9},
+            em = {{n = 28, shape = "circle", size = {1, 3}, col = {C3(255, 255, 255), C3(255, 220, 120), C3(255, 170, 230)}, tr = {0.2, 0.7}, vx = {-0.003, 0.003}, vy = {-0.003, 0.003}, twinkle = 3},
+                {n = 3, streak = true, size = {70, 110}, col = {C3(255, 255, 255)}, tr = {0, 0}, speed = 0.55}}}},
+    {name = "Desert", pal = PAL({232, 206, 150}, {214, 172, 108}, {250, 236, 200}, {226, 200, 150}, {140, 100, 56}, {54, 38, 22}, {122, 94, 60}, {214, 110, 40}),
+        fx = {orb = {col = C3(255, 200, 90), size = 52, x = 0.88, y = 0.13, speed = 1.1}, glow = {pos = "bottom", col = C3(230, 140, 60), base = 0.82, amp = 0.05, speed = 0.9},
+            em = {{n = 14, shape = "bar", size = {30, 70}, thick = 1, col = {C3(214, 170, 100), C3(236, 200, 140)}, tr = {0.55, 0.8}, vx = {0.06, 0.14}, vy = {0, 0.01}},
+                {n = 2, shape = "bar", fullWidth = true, h = 0.1, col = {C3(255, 240, 210)}, tr = {0.93, 0.97}, y = {0.4, 0.8}, bob = 0.9, sw = {0.4, 0.8}}}}},
+}
+EX.ThemeNames, EX.ThemeByName = {}, {}
+for _, th in ipairs(EX.Themes) do EX.ThemeNames[#EX.ThemeNames + 1] = th.name; EX.ThemeByName[th.name] = th end
+
+local function ck(c) return math.floor(c.R * 255 + 0.5) * 65536 + math.floor(c.G * 255 + 0.5) * 256 + math.floor(c.B * 255 + 0.5) end
+local function rnd(a, b) return a + (b - a) * math.random() end
+EX.Fx = {parts = {}, deco = {}, t = 0, acc = 0, border = nil, bt = 0}
+EX.MainStroke = Main:FindFirstChildOfClass("UIStroke")
+
+function EX.fxEnsureLayer()
+    if EX.FxBg and EX.FxBg.Parent then return EX.FxBg end
+    local ok = pcall(function() Main.ZIndex = -1 end)
+    if not ok then return nil end
+    local bg = new("Frame", {Name = "FxBg", Size = UDim2.new(1, -4, 1, -4), Position = UDim2.fromOffset(2, 2), BackgroundColor3 = Theme.bg, BorderSizePixel = 0, ZIndex = 0, ClipsDescendants = true, Active = false}, Main)
+    corner(bg, 10)
+    EX.FxBg = bg
+    return bg
+end
+function EX.fxClear()
+    local F = EX.Fx
+    for _, p in ipairs(F.parts) do pcall(function() p.inst:Destroy() end) end
+    for _, d in ipairs(F.deco) do pcall(function() d.inst:Destroy() end) end
+    F.parts, F.deco, F.border = {}, {}, nil
+end
+local function mkFrame(layer, col)
+    local f = Instance.new("Frame"); f.BorderSizePixel = 0; f.ZIndex = 0; f.Active = false; f.BackgroundColor3 = col; f.Parent = layer
+    return f
+end
+local function rounded(f) local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(1, 0); c.Parent = f end
+local function newPart(layer, e)
+    local sz = rnd(e.size and e.size[1] or 1, e.size and e.size[2] or 1)
+    local w, h = sz, sz
+    if e.shape == "cloud" then h = sz * rnd(0.22, 0.32) elseif e.shape == "bar" then h = e.thick or 2 end
+    local f = mkFrame(layer, e.col[math.random(#e.col)])
+    f.AnchorPoint = Vector2.new(0.5, 0.5)
+    local base = rnd(e.tr[1], e.tr[2]); f.BackgroundTransparency = base
+    if e.fullWidth then
+        f.Size = UDim2.new(1, 0, e.h or 0.12, 0)
+        local g = Instance.new("UIGradient"); g.Rotation = 90
+        g.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1)}); g.Parent = f
+    elseif e.streak then
+        f.Size = UDim2.fromOffset(w, 2)
+        local g = Instance.new("UIGradient")
+        g.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0)}); g.Parent = f
+    else
+        f.Size = UDim2.fromOffset(w, h)
+        if e.shape == "circle" or e.shape == "cloud" then rounded(f) end
+        if e.shape == "diamond" then f.Rotation = 45 end
+    end
+    local p = {inst = f, e = e, base = base, w = w, h = h, ph = math.random() * 6.283, wait = e.streak and rnd(0.5, 4) or 0,
+        x = math.random(), y = rnd(e.y and e.y[1] or 0, e.y and e.y[2] or 1), vx = e.vx and rnd(e.vx[1], e.vx[2]) or 0, vy = e.vy and rnd(e.vy[1], e.vy[2]) or 0,
+        sw = e.sw and rnd(e.sw[1], e.sw[2]) or 0.3, ang = math.rad(rnd(18, 32))}
+    if e.streak then f.Rotation = math.deg(p.ang); f.Visible = false end
+    return p
+end
+local function decoGlow(layer, g)
+    local top = g.pos == "top"
+    local f = mkFrame(layer, g.col)
+    f.AnchorPoint = Vector2.new(0, top and 0 or 1); f.Position = UDim2.fromScale(0, top and 0 or 1); f.Size = UDim2.new(1, 0, 0, 150)
+    local gr = Instance.new("UIGradient"); gr.Rotation = 90
+    gr.Transparency = NumberSequence.new(top and {NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1)} or {NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0)}); gr.Parent = f
+    return {inst = f, step = function(t) f.BackgroundTransparency = math.clamp(g.base + math.sin(t * g.speed) * g.amp, 0, 1) end}
+end
+local function decoOrb(layer, o)
+    local sizes, trs, circles = {2.1, 1.45, 1}, {0.93, 0.82, 0.25}, {}
+    local root = Instance.new("Frame"); root.BackgroundTransparency = 1; root.BorderSizePixel = 0; root.ZIndex = 0; root.Active = false; root.Size = UDim2.fromScale(1, 1); root.Parent = layer
+    for i = 1, 3 do
+        local f = mkFrame(root, o.col); rounded(f)
+        f.AnchorPoint = Vector2.new(0.5, 0.5); f.Position = UDim2.fromScale(o.x, o.y); f.Size = UDim2.fromOffset(o.size * sizes[i], o.size * sizes[i]); f.BackgroundTransparency = trs[i]
+        circles[i] = f
+    end
+    return {inst = root, step = function(t) for i, f in ipairs(circles) do f.BackgroundTransparency = math.clamp(trs[i] + math.sin(t * o.speed + i) * 0.03, 0, 1) end end}
+end
+local function decoStrip(layer, s)
+    local root = Instance.new("Frame"); root.BackgroundTransparency = 1; root.BorderSizePixel = 0; root.ZIndex = 0; root.Active = false; root.Size = UDim2.fromScale(1, 1); root.Parent = layer
+    local a = mkFrame(root, s.col); a.AnchorPoint = Vector2.new(0, 1); a.Position = UDim2.fromScale(0, 1); a.Size = UDim2.new(1, 0, 0, 8)
+    local b = mkFrame(root, s.edge); b.AnchorPoint = Vector2.new(0, 1); b.Position = UDim2.new(0, 0, 1, -8); b.Size = UDim2.new(1, 0, 0, 2)
+    return {inst = root, step = function() end}
+end
+local function decoSweep(layer)
+    local f = mkFrame(layer, Color3.new(1, 1, 1)); f.AnchorPoint = Vector2.new(0.5, 0.5); f.Size = UDim2.new(0.16, 0, 1.8, 0); f.Rotation = 20
+    local g = Instance.new("UIGradient")
+    g.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.9), NumberSequenceKeypoint.new(1, 1)}); g.Parent = f
+    f.BackgroundTransparency = 0
+    return {inst = f, step = function(t) f.Position = UDim2.fromScale(((t * 0.12) % 1.6) - 0.3, 0.5) end}
+end
+function EX.fxRefresh()
+    local F = EX.Fx
+    EX.fxClear()
+    local th = EX.ThemeByName[get("set_theme", "Eclypse")] or EX.ThemeByName.Eclypse
+    local useFx, useParts = get("set_fx", true), get("set_particles", true)
+    if EX.MainStroke then EX.MainStroke.Color = Theme.accent end
+    local fx = th.fx
+    if not fx or not (useFx or useParts) then return end
+    local layer = EX.fxEnsureLayer(); if not layer then return end
+    if useFx then
+        if fx.glow then F.deco[#F.deco + 1] = decoGlow(layer, fx.glow) end
+        if fx.orb then F.deco[#F.deco + 1] = decoOrb(layer, fx.orb) end
+        if fx.strip then F.deco[#F.deco + 1] = decoStrip(layer, fx.strip) end
+        if fx.sweep then F.deco[#F.deco + 1] = decoSweep(layer) end
+        F.border = fx.border
+    end
+    if useParts and fx.em then
+        local total = 0
+        for _, e in ipairs(fx.em) do for _ = 1, e.n do total = total + 1; if total <= 48 then F.parts[#F.parts + 1] = newPart(layer, e) end end end
+    end
+end
+function EX.fxStep(dt)
+    local F = EX.Fx; F.t = F.t + dt; local t = F.t
+    for _, p in ipairs(F.parts) do
+        local e, f = p.e, p.inst
+        if e.streak then
+            if p.wait > 0 then p.wait = p.wait - dt; f.Visible = false
+            else
+                f.Visible = true
+                p.x = p.x + math.cos(p.ang) * e.speed * dt; p.y = p.y + math.sin(p.ang) * e.speed * dt
+                if p.x > 1.2 or p.y > 1.2 then p.wait = rnd(1.5, 5); p.x = rnd(-0.2, 0.6); p.y = rnd(-0.1, 0.3) end
+                f.Position = UDim2.fromScale(p.x, p.y)
+            end
+        elseif e.fullWidth then
+            f.Position = UDim2.fromScale(0.5 + math.sin(t * p.sw + p.ph) * 0.05, p.y + math.sin(t * (e.bob or 0.4) + p.ph) * 0.03)
+        else
+            p.x = p.x + p.vx * dt; p.y = p.y + p.vy * dt
+            if p.x > 1.08 then p.x = -0.08 elseif p.x < -0.08 then p.x = 1.08 end
+            if p.y < -0.08 then p.y = 1.08 elseif p.y > 1.08 then p.y = -0.08 end
+            local sx = e.sway and math.sin(t * e.sway[2] + p.ph) * e.sway[1] or 0
+            f.Position = UDim2.fromScale(p.x + sx, p.y)
+            if e.twinkle then f.BackgroundTransparency = p.base + (0.5 + 0.5 * math.sin(t * e.twinkle + p.ph)) * (0.95 - p.base) end
+            if e.spin then f.Rotation = (e.shape == "diamond" and 45 or 0) + t * e.spin + p.ph * 20 end
+            if e.flap then f.Size = UDim2.fromOffset(p.w * (0.35 + 0.65 * math.abs(math.sin(t * e.flap + p.ph))), p.h) end
+        end
+    end
+    for _, d in ipairs(F.deco) do d.step(t, dt) end
+    local st = EX.MainStroke
+    if st and F.border then
+        if F.border == "rainbow" then st.Color = Color3.fromHSV((t * 0.15) % 1, 0.7, 1)
+        elseif F.border == "pulse" then st.Color = Theme.accent:Lerp(Color3.new(1, 1, 1), 0.28 * (0.5 + 0.5 * math.sin(t * 2)))
+        elseif F.border == "flicker" then if t - F.bt > 0.08 then F.bt = t; st.Color = Theme.accent:Lerp(Color3.new(0, 0, 0), math.random() * 0.35) end end
+    end
+end
+function EX.themeFlash(col)
+    local f = new("Frame", {Size = UDim2.fromScale(1, 1), BackgroundColor3 = col, BackgroundTransparency = 0.55, BorderSizePixel = 0, ZIndex = 3500, Active = false}, Main)
+    corner(f, 12)
+    local tw = TweenService:Create(f, TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}); tw:Play()
+    Debris:AddItem(f, 0.7)
+end
+function EX.applyTheme(instant)
+    local th = EX.ThemeByName[get("set_theme", "Eclypse")] or EX.ThemeByName.Eclypse
+    local t = th.pal
+    local roles = {"bg", "panel", "card", "track", "stroke"}
+    local map, nmap = {}, 0
+    local function add(old, new) if old and new and ck(old) ~= ck(new) and map[ck(old)] == nil then map[ck(old)] = new; nmap = nmap + 1 end end
+    for _, r in ipairs(roles) do add(EX.Palette[r], t[r]) end
+    add(Theme.text, t.text); add(Theme.sub, t.sub); add(EX.AccentColor, t.accent)
+    if EX.MainStroke then EX.MainStroke.Color = Theme.accent end
+    local fxBg = EX.FxBg
+    local function inFx(d) local p = d.Parent; for _ = 1, 4 do if not p then return false end; if p == fxBg then return true end; p = p.Parent end; return false end
+    local ti = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local function conv(inst, prop)
+        local nv = map[ck(inst[prop])]
+        if nv then if instant then inst[prop] = nv else TweenService:Create(inst, ti, {[prop] = nv}):Play() end end
+    end
+    if nmap > 0 then
+        for _, root in ipairs({GUI, Overlay}) do
+            for _, d in ipairs(root:GetDescendants()) do
+                if not (fxBg and inFx(d)) then
+                    if d:IsA("GuiObject") then
+                        conv(d, "BackgroundColor3")
+                        if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then conv(d, "TextColor3") end
+                        if d:IsA("TextBox") then conv(d, "PlaceholderColor3") end
+                        if d:IsA("ImageLabel") or d:IsA("ImageButton") then conv(d, "ImageColor3") end
+                        if d:IsA("ScrollingFrame") then conv(d, "ScrollBarImageColor3") end
+                    elseif d:IsA("UIStroke") then conv(d, "Color")
+                    elseif d:IsA("UIGradient") then
+                        local nk, ch = {}, false
+                        for i, k in ipairs(d.Color.Keypoints) do local nv = map[ck(k.Value)]; if nv then nk[i] = ColorSequenceKeypoint.new(k.Time, nv); ch = true else nk[i] = k end end
+                        if ch then d.Color = ColorSequence.new(nk) end
+                    end
+                end
+            end
+        end
+    end
+    for _, r in ipairs(roles) do EX.Palette[r] = t[r]; Theme[r] = t[r] end
+    Theme.text, Theme.sub, Theme.accent, EX.AccentColor = t.text, t.sub, t.accent, t.accent
+    EX.fxRefresh()
+    if nmap > 0 and not instant and Booted then pcall(EX.themeFlash, t.accent) end
+end
+function EX.applyScale()
+    local s = math.clamp(getNum("set_uiscale", 100), 50, 150) / 100
+    if not EX.UIScale then EX.UIScale = Instance.new("UIScale"); EX.UIScale.Parent = Main end
+    EX.uiScaleValue = s
+    TweenService:Create(EX.UIScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {Scale = s}):Play()
+end
+
+-- ===== V31: idioma (EN / PT-BR) =====
+EX.I18N = {
+    {"Main", "Main", "Principal"}, {"Misc", "Misc", "Diversos"}, {"Safety", "Safety", "Segurança"}, {"Visuals", "Visuals", "Visuais"}, {"World", "World", "Mundo"},
+    {"Configurações", "Settings", "Configurações"}, {"Game", "Game", "Jogo"}, {"Gun Skins", "Gun Skins", "Skins de Arma"},
+    {"Weapon Mods", "Weapon Mods", "Mods de Arma"}, {"Player", "Player", "Jogador"}, {"Movement", "Movement", "Movimento"}, {"Camera", "Camera", "Câmera"},
+    {"Rapid Fire", "Rapid Fire", "Tiro Rápido"}, {"No Recoil", "No Recoil", "Sem Recuo"}, {"No Spread", "No Spread", "Sem Dispersão"}, {"Instant Reload", "Instant Reload", "Recarga Instantânea"},
+    {"Infinite Magazine", "Infinite Magazine", "Carregador Infinito"}, {"Custom Fire Cooldown", "Custom Fire Cooldown", "Cooldown de Tiro Personalizado"}, {"Fire Cooldown (ms)", "Fire Cooldown (ms)", "Cooldown de Tiro (ms)"},
+    {"Auto Respawn", "Auto Respawn", "Respawn Automático"}, {"Fly", "Fly", "Voar"}, {"Fly Speed", "Fly Speed", "Velocidade de Voo"}, {"Fly Key", "Fly Key", "Tecla de Voo"}, {"Noclip", "Noclip", "Noclip"}, {"Noclip Key", "Noclip Key", "Tecla do Noclip"},
+    {"Include NPCs", "Include NPCs", "Incluir NPCs"}, {"Box ESP", "Box ESP", "ESP de Caixa"}, {"ESP Name", "ESP Name", "Nome no ESP"}, {"Skeleton", "Skeleton", "Esqueleto"}, {"Health Bar", "Health Bar", "Barra de Vida"},
+    {"ESP Team Check", "ESP Team Check", "ESP: Checar Time"}, {"Max Distance", "Max Distance", "Distância Máxima"}, {"Tracers", "Tracers", "Linhas"},
+    {"Interface", "Interface", "Interface"}, {"Language", "Language", "Idioma"}, {"Theme", "Theme", "Tema Visual"}, {"UI Scale %", "UI Scale %", "Escala da UI %"}, {"Ambient Particles", "Ambient Particles", "Partículas de Ambiente"}, {"Theme Effects", "Theme Effects", "Efeitos do Tema"},
+    {"Universal Settings", "Universal Settings", "Configurações Gerais"}, {"Watermark HUD", "Watermark HUD", "Marca d'água (HUD)"}, {"Mobile Toggle Button", "Mobile Toggle Button", "Botão Mobile"}, {"Menu Keybind", "Menu Keybind", "Tecla do Menu"},
+    {"Saved Configs", "Saved Configs", "Configs Salvas"}, {"Config Name", "Config Name", "Nome da Config"}, {"Save Config", "Save Config", "Salvar Config"}, {"Load Config", "Load Config", "Carregar Config"},
+    {"Delete Config", "Delete Config", "Apagar Config"}, {"Refresh Configs", "Refresh Configs", "Atualizar Configs"}, {"Export Config (copy)", "Export Config (copy)", "Exportar Config (copiar)"},
+    {"Import Code", "Import Code", "Código de Importação"}, {"Import Config", "Import Config", "Importar Config"}, {"Load on start (autoload)", "Load on start (autoload)", "Carregar ao iniciar"},
+    {"Comunidade & Fechar", "Community & Close", "Comunidade & Fechar"}, {"Join Discord (copy link)", "Join Discord (copy link)", "Entrar no Discord (copiar link)"}, {"Reset All Settings", "Reset All Settings", "Redefinir Tudo"},
+    {"Close Menu", "Close Menu", "Fechar Menu"}, {"Unload Eclypse", "Unload Eclypse", "Descarregar Eclypse"},
+    {"Cor do Fundo (RGB)", "Background Color (RGB)", "Cor do Fundo (RGB)"}, {"Cor do Menu", "Menu Color", "Cor do Menu"}, {"Tema", "Accent Preset", "Tema"},
+    {"Fundo - Vermelho", "Background - Red", "Fundo - Vermelho"}, {"Fundo - Verde", "Background - Green", "Fundo - Verde"}, {"Fundo - Azul", "Background - Blue", "Fundo - Azul"},
+    {"Menu - Vermelho", "Menu - Red", "Menu - Vermelho"}, {"Menu - Verde", "Menu - Green", "Menu - Verde"}, {"Menu - Azul", "Menu - Blue", "Menu - Azul"},
+    {"Skin Changer", "Skin Changer", "Trocador de Skins"}, {"Skin changer", "Skin changer", "Trocador de skins"}, {"Rarest on everything", "Rarest on everything", "Mais raras em tudo"}, {"Random", "Random", "Aleatório"}, {"Reset all", "Reset all", "Resetar tudo"},
+    {"Knives", "Knives", "Facas"}, {"Gloves", "Gloves", "Luvas"}, {"Gear", "Gear", "Equipamento"}, {"Grenades", "Grenades", "Granadas"}, {"Pistols", "Pistols", "Pistolas"}, {"Rifles", "Rifles", "Rifles"}, {"Heavy", "Heavy", "Pesadas"},
+    {"Status", "Status", "Status"}, {"Update Log", "Update Log", "Novidades"}, {"Copy Discord Link", "Copy Discord Link", "Copiar link do Discord"}, {"Game Profile", "Game Profile", "Perfil do Jogo"}, {"Profile", "Profile", "Perfil"},
+    {"Apply game preset", "Apply game preset", "Aplicar preset do jogo"}, {"Run game script", "Run game script", "Executar script do jogo"}, {"Copy PlaceId", "Copy PlaceId", "Copiar PlaceId"},
+    {"Diagnostics (console F9)", "Diagnostics (console F9)", "Diagnóstico (console F9)"}, {"Rescan weapon fields", "Rescan weapon fields", "Reescanear campos da arma"},
+}
+EX.I18NIndex = {}
+for _, row in ipairs(EX.I18N) do EX.I18NIndex[row[1]] = row; EX.I18NIndex[row[2]] = row; EX.I18NIndex[row[3]] = row end
+function EX.applyLanguage()
+    local pt = get("set_lang", "English") == "Português (BR)"
+    local idx = EX.I18NIndex
+    for _, d in ipairs(GUI:GetDescendants()) do
+        if d:IsA("TextLabel") or d:IsA("TextButton") then
+            local src = d:GetAttribute("i18n")
+            if not src and idx[d.Text] then src = d.Text; d:SetAttribute("i18n", src) end
+            local row = src and idx[src]
+            if row then local want = pt and row[3] or row[2]; if d.Text ~= want then d.Text = want end end
+        end
+    end
+end
+
+-- ===== V31: skins (UI + catalogo do video; aplicacao depende de receita do jogo) =====
+local function slug(s) return (s:gsub("[^%w]", "")) end
+EX.SkinGroups = {
+    {page = "Skins", col = 2, title = "Knives", items = {"Butterfly Knife", "CT Knife", "Flip Knife", "Gut Knife", "Karambit", "LightSaber", "M9 Bayonet", "Skeleton Knife", "Stiletto Knife", "T Knife"}},
+    {page = "Skins", col = 1, title = "Gloves", items = {"CT Glove", "Driver Gloves", "Hand Wraps", "Operator Gloves", "Sports Gloves", "T Glove"}},
+    {page = "Skins", col = 1, title = "Gear", items = {"C4", "Zeus x27"}},
+    {page = "Skins", col = 2, title = "Grenades", items = {"Decoy Grenade", "Flashbang", "HE Grenade", "Incendiary Grenade", "Molotov", "Smoke Grenade"}},
+    {page = "Gun Skins", col = 1, title = "Pistols", items = {"Desert Eagle", "Dual Berettas", "Five-SeveN", "Glock-18", "P250", "R8 Revolver", "Tec-9"}},
+    {page = "Gun Skins", col = 2, title = "SMGs", items = {"MAC-10", "MP9", "P90"}},
+    {page = "Gun Skins", col = 2, title = "Rifles", items = {"AK-47", "AUG", "AWP", "Galil AR", "M4A1-S", "M4A4", "SG 553", "SSG 08"}},
+    {page = "Gun Skins", col = 1, title = "Heavy", items = {"MAG-7", "Negev", "Nova", "Sawed-Off", "XM1014"}},
+}
+-- Somente listas vistas no video. Item ausente = lista desconhecida (so "Default"). Estenda aqui.
+EX.SkinNames = {
+    ["Butterfly Knife"] = {"Lebron James", "Blackwidow", "Damascus", "Doodle", "Fade", "Midnight"},
+    ["Desert Eagle"] = {"Freedom", "High Octane", "Lore", "Circuit", "Hero of Hell", "Mercy"},
+}
+function EX.skinOptions(item)
+    local l = {"Default"}
+    for _, s in ipairs(EX.SkinNames[item] or {}) do l[#l + 1] = s end
+    return l
+end
+function EX.skinPicks()
+    local picks, n = {}, 0
+    for _, grp in ipairs(EX.SkinGroups) do for _, item in ipairs(grp.items) do
+        local v = get("skin_" .. slug(item), "Default")
+        if v ~= "Default" then picks[item] = v; n = n + 1 end
+    end end
+    return picks, n
+end
+function EX.skinApply(force)
+    local S = EX.Profile and EX.Profile.skins
+    if not get("skin_on", false) and not force then
+        if S and type(S.restore) == "function" then pcall(S.restore) end
+        return
+    end
+    if not (S and type(S.apply) == "function") then
+        if not EX.skinWarned then EX.skinWarned = true; notify("Skin Changer", "apply recipe is UNSET for this game (Game > Dump viewmodel)") end
+        return
+    end
+    local picks, n = EX.skinPicks()
+    local ok, err = pcall(S.apply, picks)
+    if not ok then warn("[Eclypse] skins.apply: " .. tostring(err)) else EX.skinApplied = n end
+end
+function EX.skinBulk(mode)
+    for _, grp in ipairs(EX.SkinGroups) do for _, item in ipairs(grp.items) do
+        local key, o = "skin_" .. slug(item), EX.skinOptions(item)
+        local pick = "Default"
+        if mode == "rarest" then pick = o[#o] elseif mode == "random" then pick = o[math.random(#o)] end
+        Prefs[key] = pick; if EX.Refresh[key] then pcall(EX.Refresh[key]) end
+    end end
+    EX.skinApply(true)
+end
+local function buildSkinPage(pageName, c1, c2)
+    for _, grp in ipairs(EX.SkinGroups) do
+        if grp.page == pageName then
+            local g = CreateGroup(grp.col == 1 and c1 or c2, grp.title)
+            for _, item in ipairs(grp.items) do EX.SkinDD(g, item) end
+        end
+    end
+end
+function EX.SkinDD(parent, item) return EX.SearchDD(parent, item, "skin_" .. slug(item), EX.skinOptions(item), "Default") end
+AddPage("Skins", function(c1, c2)
+    local g = CreateGroup(c1, "Skin Changer")
+    CreateToggle(g, "Skin changer", "skin_on", false)
+    EX.skinStatus = label(g, {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Text = "", TextSize = 11, TextColor3 = Theme.sub, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
+    EX.Btn(g, "Rarest on everything", nil, function() EX.skinBulk("rarest") end)
+    EX.Btn(g, "Random", nil, function() EX.skinBulk("random") end)
+    EX.Btn(g, "Reset all", nil, function() EX.skinBulk("reset") end)
+    buildSkinPage("Skins", c1, c2)
+end)
+AddPage("Gun Skins", function(c1, c2) buildSkinPage("Gun Skins", c1, c2) end)
+
+-- ===== V31: paginas Main e Game =====
+AddPage("Main", function(c1, c2)
+    local gS = CreateGroup(c1, "Status")
+    EX.mainStatus = label(gS, {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Text = "...", TextSize = 12, TextColor3 = Theme.sub, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
+    local gD = CreateGroup(c2, "Discord")
+    label(gD, {Size = UDim2.new(1, 0, 0, 18), Text = EX.Brand.invite, TextSize = 12, TextColor3 = Theme.sub})
+    EX.Btn(gD, "Copy Discord Link", nil, function() EX.copyInvite() end)
+    local gU = CreateGroup(c2, "Update Log")
+    EX.Info(gU, "V31", "ESP: team check ignora times que nao separam jogadores; jogadores sem Humanoid/Character resolvidos por fallback. Weapons: varredura unica por arma, com limite. Bots: fallback por avatar real. Novo: Noclip, perfis por jogo, Skins/Gun Skins, Settings com temas animados, idioma, escala e autoload.")
+end)
+AddPage("Game", function(c1, c2)
+    local g1 = CreateGroup(c1, "Game Profile")
+    EX.gameInfo = label(g1, {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Text = "...", TextSize = 11, TextColor3 = Theme.sub, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
+    CreateDropdown(g1, "Profile", "game_override", EX.GameLabels, "Auto")
+    CreateToggle(g1, "Auto-run game script", "game_autorun", false)
+    EX.Btn(g1, "Apply game preset", nil, function() EX.applyPreset() end)
+    EX.Btn(g1, "Run game script", nil, function() EX.runGameScript() end)
+    EX.Btn(g1, "Copy PlaceId", nil, function() local ok = pcall(function() setclipboard(tostring(game.PlaceId)) end); notify("PlaceId", ok and tostring(game.PlaceId) .. " copied" or tostring(game.PlaceId)) end)
+    local g2 = CreateGroup(c2, "Diagnostics (console F9)")
+    EX.Btn(g2, "ESP: why players are rejected", nil, function() EX.diagPlayers() end)
+    EX.Btn(g2, "Dump Workspace + players", nil, function() EX.dumpChars() end)
+    EX.Btn(g2, "Dump viewmodel / tools", nil, function() EX.dumpViewmodel() end)
+    EX.Btn(g2, "Dump weapon candidates", nil, function() EX.dumpWeapon() end)
+end)
+
+-- ===== V31: relogio de UI (efeitos a 30 Hz, textos a 2 Hz; so com o menu aberto) =====
+do
+    local acc, slow = 0, 0
+    Conns[#Conns + 1] = RunService.Heartbeat:Connect(function(dt)
+        if not GUI.Enabled then return end
+        acc = acc + dt; slow = slow + dt
+        if acc >= 1 / 30 then local d = acc; acc = 0; pcall(EX.fxStep, d) end
+        if slow >= 0.5 then
+            slow = 0
+            if EX.mainStatus then pcall(function()
+                local n = EX.countESP and EX.countESP() or 0
+                EX.mainStatus.Text = (EX.Profile and EX.Profile.label or "No profile") .. "  |  PlaceId " .. tostring(game.PlaceId) .. "\nESP entities drawn: " .. n .. "  |  Theme: " .. tostring(get("set_theme", "Eclypse"))
+            end) end
+            if EX.gameInfo then pcall(function() EX.gameInfo.Text = EX.profileStatus() end) end
+            if EX.skinStatus then pcall(function()
+                local S = EX.Profile and EX.Profile.skins
+                EX.skinStatus.Text = (S and S.apply) and ("Apply recipe set. Applied picks: " .. tostring(EX.skinApplied or 0)) or "Apply recipe UNSET for this game: selections are saved but nothing is changed in-game yet."
+            end) end
+            if EX.wStatus and EX.weaponStatus then pcall(function() EX.wStatus.Text = EX.weaponStatus() end) end
+        end
+    end)
+end
+end
+
+function EX.bootV31()
+    pcall(EX.detectGame); pcall(EX.applyScale); pcall(EX.applyTheme, true); pcall(EX.applyLanguage)
+    pcall(EX.autoloadRun)
+    if get("game_autorun", false) and EX.Profile and type(EX.Profile.scriptUrl) == "string" then task.defer(EX.runGameScript) end
+end
+
+-- ===== V31.1 DevTools: registro de modulos, hot reload, detector de erros, dependencias, logger, inspetor de UI, diagnostico =====
+do
+    local LogService = game:GetService("LogService")
+    local LOGMAX = 300
+    local Buf = {n = 0, ver = 0}
+    EX.LogBuf = Buf
+    function EX.Log(level, tag, msg)
+        Buf.n = Buf.n + 1; Buf.ver = Buf.ver + 1
+        Buf[(Buf.n - 1) % LOGMAX + 1] = {os.date("%H:%M:%S"), tostring(level), tostring(tag), tostring(msg):sub(1, 600)}
+    end
+    function EX.logLines(count)
+        local out = {}
+        for i = math.max(1, Buf.n - LOGMAX + 1, Buf.n - count + 1), Buf.n do
+            local e = Buf[(i - 1) % LOGMAX + 1]; out[#out + 1] = string.format("%s [%s] %s: %s", e[1], e[2], e[3], e[4])
+        end
+        return out
+    end
+    function EX.logSave()
+        if type(writefile) ~= "function" or type(isfolder) ~= "function" then return false end
+        return pcall(function()
+            if not isfolder("Eclypse") then makefolder("Eclypse") end
+            if not isfolder("Eclypse/logs") then makefolder("Eclypse/logs") end
+            writefile("Eclypse/logs/" .. os.date("%Y%m%d") .. ".log", table.concat(EX.logLines(LOGMAX), "\n"))
+        end)
+    end
+    Conns[#Conns + 1] = LogService.MessageOut:Connect(function(msg, mtype)
+        local low = msg:lower()
+        local mine = low:find("eclypse", 1, true) or low:find("drx", 1, true)
+        if mtype == Enum.MessageType.MessageError and (mine or get("dev_logall", false)) then EX.Log("error", "console", msg)
+        elseif mtype == Enum.MessageType.MessageWarning and mine then EX.Log("warn", "console", msg) end
+    end)
+    pcall(function()
+        Conns[#Conns + 1] = game:GetService("ScriptContext").Error:Connect(function(msg, trace)
+            local low = (tostring(msg) .. tostring(trace)):lower()
+            if low:find("eclypse", 1, true) or low:find("drx", 1, true) or get("dev_logall", false) then EX.Log("error", "script", tostring(msg) .. " | " .. tostring(trace):sub(1, 200)) end
+        end)
+    end)
+
+    -- registro de modulos
+    local M = {order = {}, by = {}, ver = 0}
+    EX.Mods = M
+    local function tb(e) return debug.traceback(tostring(e), 2) end
+    local function caps(list)
+        local env = (type(getgenv) == "function" and getgenv()) or (type(getfenv) == "function" and getfenv(1)) or _G
+        local miss = {}
+        for _, n in ipairs(list or {}) do if env[n] == nil then miss[#miss + 1] = n end end
+        return miss
+    end
+    local function fail(m, what, err)
+        m.errors = m.errors + 1; m.last = tostring(err)
+        local now = os.clock(); m.win[#m.win + 1] = now
+        while #m.win > 0 and now - m.win[1] > 10 do table.remove(m.win, 1) end
+        EX.Log("error", m.name, what .. ": " .. tostring(err))
+        warn("[Eclypse] module " .. m.name .. " " .. what .. " failed: " .. tostring(err):sub(1, 300))
+        M.ver = M.ver + 1
+    end
+    local function call(m, what, fn)
+        if type(fn) ~= "function" then return true end
+        local ok, err = xpcall(fn, tb)
+        if not ok then fail(m, what, err) end
+        return ok
+    end
+    function EX.modRegister(spec)
+        local m = M.by[spec.name]
+        if m then for k, v in pairs(spec) do m[k] = v end
+        else
+            m = {name = spec.name, deps = {}, needs = {}, status = "stopped", errors = 0, win = {}}
+            for k, v in pairs(spec) do m[k] = v end
+            M.by[m.name] = m; M.order[#M.order + 1] = m.name
+        end
+        M.ver = M.ver + 1; return m
+    end
+    -- disjuntor: envolve callbacks por frame de um modulo; 5 falhas em 10 s param o modulo
+    function EX.modGuard(name, fn)
+        return function(...)
+            local m = M.by[name]; if not m or m.status ~= "running" then return end
+            local args = table.pack(...)
+            local ok, err = xpcall(function() return fn(table.unpack(args, 1, args.n)) end, tb)
+            if not ok then
+                fail(m, "tick", err)
+                if #m.win >= 5 then EX.modStop(name); m.status = "error"; m.last = "tripped: 5 errors in 10 s | " .. tostring(m.last); notify("Module " .. name, "stopped after repeated errors") end
+            end
+        end
+    end
+    local function startRec(name, visiting)
+        local m = M.by[name]; if not m then return false, "unknown module " .. name end
+        if m.status == "running" then return true end
+        if visiting[name] then return false, "dependency cycle at " .. name end
+        visiting[name] = true
+        local ok, why = true, nil
+        local miss = caps(m.needs)
+        if #miss > 0 then ok, why = false, "missing executor functions: " .. table.concat(miss, ", ") end
+        if ok then
+            for _, d in ipairs(m.deps) do
+                local o2, w2 = startRec(d, visiting)
+                if not o2 then ok, why = false, "dependency " .. d .. ": " .. tostring(w2); break end
+            end
+        end
+        visiting[name] = nil
+        if not ok then m.status = "blocked"; m.last = why; EX.Log("error", name, why); M.ver = M.ver + 1; return false, why end
+        m.win = {}
+        if call(m, "init", m.init) then m.status = "running"; m.last = nil; EX.Log("info", name, "started") else m.status = "error" end
+        M.ver = M.ver + 1
+        return m.status == "running", m.last
+    end
+    function EX.modStart(name) return startRec(name, {}) end
+    function EX.modStop(name)
+        local m = M.by[name]; if not m or m.status ~= "running" then return end
+        for _, on in ipairs(M.order) do
+            local o = M.by[on]
+            if o.status == "running" then for _, d in ipairs(o.deps) do if d == name then EX.modStop(on) end end end
+        end
+        call(m, "stop", m.stop); m.status = "stopped"; EX.Log("info", name, "stopped"); M.ver = M.ver + 1
+    end
+    local function collect(name, out)
+        for _, on in ipairs(M.order) do
+            local o = M.by[on]
+            if o.status == "running" and not out[on] then
+                for _, d in ipairs(o.deps) do if d == name then out[on] = true; out[#out + 1] = on; collect(on, out); break end end
+            end
+        end
+    end
+    function EX.modLoadFile(path, expectName)
+        if type(readfile) ~= "function" or type(loadstring) ~= "function" then return false, "readfile/loadstring unavailable" end
+        local okR, src = pcall(readfile, path); if not okR or type(src) ~= "string" then return false, "cannot read " .. tostring(path) end
+        local fn, err = loadstring(src, "=" .. path); if not fn then return false, "syntax: " .. tostring(err) end
+        local okC, factory = xpcall(fn, tb); if not okC then return false, factory end
+        if type(factory) ~= "function" then return false, "file must return function(EX) return {name=..., init=..., stop=...} end" end
+        local okF, spec = xpcall(factory, tb, EX); if not okF then return false, spec end
+        if type(spec) ~= "table" or type(spec.name) ~= "string" then return false, "factory must return a table with a string name" end
+        if expectName and spec.name ~= expectName then return false, "file now declares '" .. spec.name .. "', expected '" .. expectName .. "'" end
+        spec.file = path; spec.deps = spec.deps or {}; spec.needs = spec.needs or {}
+        EX.modRegister(spec); return true
+    end
+    function EX.modReload(name)
+        local m = M.by[name]; if not m then return false, "unknown module" end
+        local deps = {}; collect(name, deps)
+        EX.modStop(name)
+        if m.file then
+            local ok, err = EX.modLoadFile(m.file, name)
+            if not ok then m.status = "error"; m.last = "reload failed: " .. tostring(err); EX.Log("error", name, m.last); M.ver = M.ver + 1; notify("Reload " .. name, "failed, see Event Logger"); return false, m.last end
+        end
+        local ok, why = EX.modStart(name)
+        for _, on in ipairs(deps) do EX.modStart(on) end
+        EX.Log("info", name, "reloaded"); notify("Reload " .. name, ok and "ok" or tostring(why))
+        return ok, why
+    end
+    function EX.modScan()
+        if type(listfiles) ~= "function" or type(isfolder) ~= "function" then notify("Modules", "listfiles unavailable in this executor"); return end
+        pcall(function() if not isfolder("Eclypse") then makefolder("Eclypse") end; if not isfolder("Eclypse/modules") then makefolder("Eclypse/modules") end end)
+        local ok, files = pcall(listfiles, "Eclypse/modules"); local n = 0
+        if ok and type(files) == "table" then
+            for _, f in ipairs(files) do
+                if tostring(f):match("%.lua$") then local okL, e = EX.modLoadFile(tostring(f)); if okL then n = n + 1 else EX.Log("error", "modules", tostring(f) .. ": " .. tostring(e)) end end
+            end
+        end
+        notify("Modules", n .. " file module(s) registered")
+    end
+    local function builtins()
+        EX.modRegister({name = "GameProfile", init = function() EX.detectGame() end})
+        EX.modRegister({name = "ThemeFX", init = function() EX.fxRefresh() end, stop = function() EX.fxClear(); if EX.MainStroke then EX.MainStroke.Color = Theme.accent end end})
+        EX.modRegister({name = "SkinChanger", deps = {"GameProfile"}, init = function() EX.skinApply() end, stop = function()
+            local S = EX.Profile and EX.Profile.skins; if S and type(S.restore) == "function" then S.restore() end
+            Prefs.skin_on = false; if EX.Refresh.skin_on then EX.Refresh.skin_on() end
+        end})
+        EX.modRegister({name = "Noclip", stop = function() Prefs.mv_noclip = false; if EX.Refresh.mv_noclip then EX.Refresh.mv_noclip() end; EX.noclipRestore() end})
+        EX.modRegister({name = "Bots", stop = function() EX.botClear() end})
+    end
+
+    -- diagnostico de execucao
+    local fps = {avg = 60}
+    Conns[#Conns + 1] = RunService.Heartbeat:Connect(function(dt) fps.avg = fps.avg + (1 / math.max(dt, 1e-3) - fps.avg) * 0.05 end)
+    function EX.diagSummary()
+        local bad = 0; for _, n in ipairs(M.order) do local s = M.by[n].status; if s == "error" or s == "blocked" then bad = bad + 1 end end
+        return string.format("fps~%.0f | memory %.1f MB | connections %d | modules %d (%d failing) | log entries %d", fps.avg, collectgarbage("count") / 1024, #Conns, #M.order, bad, Buf.n)
+    end
+    function EX.diagReport()
+        local env = (type(getgenv) == "function" and getgenv()) or _G
+        local exn = "unknown"
+        if type(identifyexecutor) == "function" then local ok, a, b = pcall(identifyexecutor); if ok then exn = tostring(a) .. (b and (" " .. tostring(b)) or "") end end
+        local lines = {"[Eclypse diagnostics] " .. os.date("%Y-%m-%d %H:%M:%S"), "executor: " .. exn,
+            string.format("PlaceId %s | GameId %s | JobId %s", tostring(game.PlaceId), tostring(game.GameId), tostring(game.JobId)), EX.diagSummary()}
+        local okP, ping = pcall(function() return game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue() end)
+        if okP then lines[#lines + 1] = string.format("ping: %.0f ms", ping) end
+        local have, miss = {}, {}
+        for _, n in ipairs({"loadstring", "readfile", "writefile", "listfiles", "isfolder", "isfile", "makefolder", "delfile", "setclipboard", "hookmetamethod", "hookfunction", "checkcaller", "newcclosure", "getloadedmodules", "getconnections", "getgenv", "getrawmetatable", "request", "Drawing", "identifyexecutor"}) do
+            if env[n] ~= nil then have[#have + 1] = n else miss[#miss + 1] = n end
+        end
+        lines[#lines + 1] = "available: " .. table.concat(have, ", "); lines[#lines + 1] = "missing: " .. table.concat(miss, ", ")
+        local prof = {}
+        for name, p in pairs(EX.prof or {}) do prof[#prof + 1] = {name, p.t / math.max(p.n, 1) * 1000, p.n} end
+        table.sort(prof, function(a, b) return a[2] > b[2] end)
+        lines[#lines + 1] = "slowest functions (avg ms, calls):"
+        for i = 1, math.min(6, #prof) do lines[#lines + 1] = string.format("  %s  %.2f ms  x%d", prof[i][1], prof[i][2], prof[i][3]) end
+        lines[#lines + 1] = "modules:"
+        for _, n in ipairs(M.order) do
+            local m = M.by[n]
+            lines[#lines + 1] = string.format("  %s  %s  errors=%d  deps=%s%s", n, m.status, m.errors, table.concat(m.deps, ","), m.last and ("  last: " .. (m.last:sub(1, 140):gsub("\n", " "))) or "")
+        end
+        lines[#lines + 1] = "recent log:"
+        for _, l in ipairs(EX.logLines(12)) do lines[#lines + 1] = "  " .. l end
+        EX.emit(table.concat(lines, "\n"), "Diagnostics")
+    end
+
+    -- inspetor de UI
+    local Insp = {on = false}
+    local function pick()
+        local m = UserInputService:GetMouseLocation() - GuiService:GetGuiInset()
+        for _, o in ipairs(PlayerGui:GetGuiObjectsAtPosition(m.X, m.Y)) do
+            if not o:FindFirstAncestor("DrxOverlay") and not o:FindFirstAncestor("DrxMouseModal") then return o end
+        end
+    end
+    local function describe(o)
+        local t = {o.Name .. " [" .. o.ClassName .. "]", o:GetFullName(),
+            string.format("pos %.0f,%.0f  size %.0f,%.0f  Z=%.0f  visible=%s", o.AbsolutePosition.X, o.AbsolutePosition.Y, o.AbsoluteSize.X, o.AbsoluteSize.Y, o.ZIndex, tostring(o.Visible)),
+            string.format("bg=%.0f,%.0f,%.0f (transp %.2f)  children=%d", o.BackgroundColor3.R * 255, o.BackgroundColor3.G * 255, o.BackgroundColor3.B * 255, o.BackgroundTransparency, #o:GetChildren())}
+        if o:IsA("TextLabel") or o:IsA("TextButton") or o:IsA("TextBox") then t[#t + 1] = "text=\"" .. o.Text:sub(1, 60) .. "\" size=" .. o.TextSize end
+        local a = {}; for k, v in pairs(o:GetAttributes()) do a[#a + 1] = k .. "=" .. tostring(v) end
+        if #a > 0 then t[#t + 1] = "attributes: " .. table.concat(a, ", ") end
+        return t
+    end
+    function EX.inspSet(on)
+        on = on and true or false; if on == Insp.on then return end; Insp.on = on
+        if on then
+            local box = Instance.new("Frame"); box.Name = "DrxInspBox"; box.BackgroundTransparency = 1; box.BorderSizePixel = 0; box.ZIndex = 9000; box.Active = false; box.Visible = false
+            local st = Instance.new("UIStroke"); st.Thickness = 2; st.Color = Theme.accent; st.Parent = box; box.Parent = Overlay
+            local tip = Instance.new("TextLabel"); tip.Name = "DrxInspTip"; tip.BackgroundColor3 = Color3.fromRGB(10, 10, 14); tip.BackgroundTransparency = 0.1; tip.TextColor3 = Color3.new(1, 1, 1)
+            tip.Font = Enum.Font.Code; tip.TextSize = 11; tip.TextXAlignment = Enum.TextXAlignment.Left; tip.TextYAlignment = Enum.TextYAlignment.Top; tip.AutomaticSize = Enum.AutomaticSize.XY; tip.Size = UDim2.fromOffset(0, 0); tip.ZIndex = 9001; tip.Active = false; tip.Visible = false
+            local pad = Instance.new("UIPadding"); pad.PaddingLeft, pad.PaddingRight, pad.PaddingTop, pad.PaddingBottom = UDim.new(0, 6), UDim.new(0, 6), UDim.new(0, 4), UDim.new(0, 4); pad.Parent = tip
+            tip.Parent = Overlay
+            Insp.box, Insp.tip = box, tip
+            Insp.conn = RunService.RenderStepped:Connect(function()
+                local ok, o = pcall(pick)
+                if ok and o then
+                    Insp.cur = o
+                    local sg = o:FindFirstAncestorWhichIsA("ScreenGui"); local inset = (sg and sg.IgnoreGuiInset) and Vector2.zero or GuiService:GetGuiInset()
+                    box.Position = UDim2.fromOffset(o.AbsolutePosition.X + inset.X, o.AbsolutePosition.Y + inset.Y); box.Size = UDim2.fromOffset(o.AbsoluteSize.X, o.AbsoluteSize.Y); box.Visible = true
+                    local lines = describe(o); lines[#lines + 1] = "right-click: print + copy"
+                    tip.Text = table.concat(lines, "\n"); local m = UserInputService:GetMouseLocation(); tip.Position = UDim2.fromOffset(m.X + 14, m.Y + 14); tip.Visible = true
+                else Insp.cur = nil; box.Visible = false; tip.Visible = false end
+            end)
+            Insp.click = UserInputService.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton2 and Insp.cur then EX.emit(table.concat(describe(Insp.cur), "\n"), "UI Inspector") end end)
+        else
+            for _, k in ipairs({"conn", "click"}) do if Insp[k] then Insp[k]:Disconnect(); Insp[k] = nil end end
+            for _, k in ipairs({"box", "tip"}) do if Insp[k] then Insp[k]:Destroy(); Insp[k] = nil end end
+        end
+    end
+    function EX.inspToggle() EX.inspSet(not Insp.on); if EX.inspLabel then EX.inspLabel.Text = Insp.on and "Inspector ON: hover any element, right-click to print/copy its details." or "Inspector OFF." end end
+    function EX.inspTree()
+        local lines = {"[Eclypse UI tree] DrxHub (depth 4)"}
+        local function walk(i, d)
+            if #lines >= 400 then return end
+            lines[#lines + 1] = string.rep("  ", d) .. i.Name .. " [" .. i.ClassName .. "]" .. ((i:IsA("GuiObject") and not i.Visible) and " (hidden)" or "")
+            if d < 4 then for _, c in ipairs(i:GetChildren()) do walk(c, d + 1) end end
+        end
+        local root = PlayerGui:FindFirstChild("DrxHub"); if root then walk(root, 0) end
+        EX.emit(table.concat(lines, "\n"), "UI tree")
+    end
+
+    -- cursor de reserva (ponto) e correcao de icone: so com o menu aberto
+    local dot
+    Conns[#Conns + 1] = RunService.RenderStepped:Connect(function()
+        if GUI.Enabled and get("ui_cursordot", true) then
+            if not dot or not dot.Parent then
+                dot = Instance.new("Frame"); dot.Name = "DrxCursorDot"; dot.Size = UDim2.fromOffset(8, 8); dot.AnchorPoint = Vector2.new(0.5, 0.5); dot.BackgroundColor3 = Theme.accent; dot.BorderSizePixel = 0; dot.ZIndex = 9999; dot.Active = false
+                local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(1, 0); c.Parent = dot
+                local s = Instance.new("UIStroke"); s.Color = Color3.new(1, 1, 1); s.Thickness = 1; s.Parent = dot; dot.Parent = Overlay
+            end
+            local p = UserInputService:GetMouseLocation(); dot.Position = UDim2.fromOffset(p.X, p.Y); dot.Visible = true
+        elseif dot then dot.Visible = false end
+    end)
+
+    -- pagina
+    AddPage("Dev Tools", function(c1, c2)
+        local gM = CreateGroup(c1, "Modules (hot reload / dependencies / errors)")
+        EX.devMods = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1}, gM)
+        new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, EX.devMods)
+        EX.Btn(gM, "Scan Eclypse/modules (*.lua)", nil, function() EX.modScan(); M.ver = M.ver + 1 end)
+        EX.Btn(gM, "Start all modules", nil, function() for _, n in ipairs(M.order) do EX.modStart(n) end end)
+        EX.Info(gM, "Module file format", "Eclypse/modules/<name>.lua must return function(EX) return {name = \"X\", deps = {\"ThemeFX\"}, needs = {\"readfile\"}, init = function() end, stop = function() end} end. Reload re-reads the file, runs stop, replaces the code, runs init and restarts dependents. Built-in modules reload by running their stop/init; the V30 base code is not reloadable.")
+        local gL = CreateGroup(c1, "Event Logger")
+        CreateToggle(gL, "Log all game errors", "dev_logall", false)
+        local sf = new("ScrollingFrame", {Size = UDim2.new(1, 0, 0, 170), BackgroundColor3 = Theme.card, BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = Theme.accent, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new()}, gL)
+        corner(sf, 8); outline(sf, 1, Theme.stroke); new("UIPadding", {PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6)}, sf)
+        EX.logView = label(sf, {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Text = "", TextSize = 10, Font = Enum.Font.Code, TextColor3 = Theme.sub, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
+        EX.logScroll = sf
+        EX.Btn(gL, "Copy log", nil, function() EX.emit(table.concat(EX.logLines(LOGMAX), "\n"), "Event log") end)
+        EX.Btn(gL, "Save log to file", nil, function() notify("Log", EX.logSave() and "saved to Eclypse/logs" or "could not write file") end)
+        EX.Btn(gL, "Clear log", nil, function() Buf.n = 0; Buf.ver = Buf.ver + 1 end)
+        local gI = CreateGroup(c2, "UI Inspector")
+        EX.inspLabel = label(gI, {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Text = "Inspector OFF.", TextSize = 11, TextColor3 = Theme.sub, TextWrapped = true})
+        EX.Btn(gI, "Toggle inspector", nil, function() EX.inspToggle() end)
+        EX.Btn(gI, "Dump DrxHub tree", nil, function() EX.inspTree() end)
+        CreateToggle(gI, "Cursor dot (if cursor vanishes)", "ui_cursordot", true)
+        local gD = CreateGroup(c2, "Script Diagnostics")
+        EX.diagLabel = label(gD, {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Text = "", TextSize = 11, TextColor3 = Theme.sub, TextWrapped = true})
+        EX.Btn(gD, "Run diagnostics (print + copy)", nil, function() EX.diagReport() end)
+        local gV = CreateGroup(c2, "Config Versioning")
+        EX.verPick = EX.DynDD(gV, "Version", "cfg_ver", "None")
+        EX.Btn(gV, "Save version now", nil, function() notify("Versions", EX.verSave("manual") and "saved" or "failed") end)
+        EX.Btn(gV, "Restore selected", nil, function() EX.verRestore() end)
+        EX.Btn(gV, "Diff selected vs current", nil, function() EX.verDiff() end)
+        EX.Btn(gV, "Refresh list", nil, function() EX.verRefresh() end)
+        local gR = CreateGroup(c2, "State Recovery")
+        CreateToggle(gR, "Auto-save state", "rec_on", true)
+        CreateToggle(gR, "Restore state on start", "rec_always", true)
+        EX.Btn(gR, "Save state now", nil, function() pcall(EX.stateSave, true); notify("Recovery", "state saved") end)
+        EX.Btn(gR, "Restore state now", nil, function() local ok, r = EX.stateRestore(); notify("Recovery", ok and ("restored (" .. tostring(r) .. " options)") or tostring(r)) end)
+    end)
+
+    local shownMods, shownLog, acc = -1, -1, 0
+    local function rebuildMods()
+        local box = EX.devMods; if not box then return end
+        for _, c in ipairs(box:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+        for i, n in ipairs(M.order) do
+            local m = M.by[n]
+            local row = new("Frame", {Size = UDim2.new(1, 0, 0, 44), BackgroundColor3 = Theme.card, LayoutOrder = i}, box); corner(row, 8); outline(row, 1, Theme.stroke)
+            label(row, {Size = UDim2.new(1, -150, 0, 18), Position = UDim2.fromOffset(10, 4), Text = n .. (m.file and "  (file)" or ""), TextSize = 13, Font = Enum.Font.GothamBold})
+            local colr = (m.status == "running") and Color3.fromRGB(80, 220, 120) or (m.status == "stopped" and Theme.sub or Color3.fromRGB(255, 90, 90))
+            local extra = (#m.deps > 0 and ("  deps:" .. table.concat(m.deps, ",")) or "") .. (m.last and ("  " .. (m.last:gsub("\n", " "):sub(1, 60))) or "")
+            label(row, {Size = UDim2.new(1, -150, 0, 14), Position = UDim2.fromOffset(10, 25), Text = m.status .. "  errors:" .. m.errors .. extra, TextSize = 10, TextColor3 = colr, TextTruncate = Enum.TextTruncate.AtEnd})
+            local function small(txt, x, fn)
+                local b = new("TextButton", {Size = UDim2.fromOffset(58, 22), Position = UDim2.new(1, x, 0.5, -11), BackgroundColor3 = Theme.panel, Text = txt, Font = Enum.Font.GothamBold, TextSize = 11, TextColor3 = Theme.text, AutoButtonColor = false}, row)
+                corner(b, 6); outline(b, 1, Theme.stroke); b.MouseButton1Click:Connect(function() pcall(fn); M.ver = M.ver + 1 end)
+            end
+            small("Reload", -130, function() EX.modReload(n) end)
+            small(m.status == "running" and "Stop" or "Start", -68, function() if m.status == "running" then EX.modStop(n) else EX.modStart(n) end end)
+        end
+    end
+    Conns[#Conns + 1] = RunService.Heartbeat:Connect(function(dt)
+        acc = acc + dt; if acc < 0.5 then return end; acc = 0
+        if not GUI.Enabled or EX.curPage ~= "Dev Tools" then return end
+        if shownMods ~= M.ver then shownMods = M.ver; pcall(rebuildMods) end
+        if shownLog ~= Buf.ver and EX.logView then
+            shownLog = Buf.ver; EX.logView.Text = table.concat(EX.logLines(80), "\n")
+            local sf = EX.logScroll; if sf then sf.CanvasPosition = Vector2.new(0, math.max(0, sf.AbsoluteCanvasSize.Y - sf.AbsoluteSize.Y)) end
+        end
+        if EX.diagLabel then EX.diagLabel.Text = EX.diagSummary() end
+    end)
+
+    function EX.devCleanup()
+        pcall(EX.stateSave); pcall(EX.stateFlag, false); pcall(EX.logSave); EX.inspSet(false)
+        for i = #M.order, 1, -1 do pcall(EX.modStop, M.order[i]) end
+    end
+    function EX.bootDev()
+        builtins()
+        for _, n in ipairs(M.order) do EX.modStart(n) end
+        local crashed = EX.stateFlag and EX.stateFlag() or false
+        if EX.stateFlag then EX.stateFlag(true) end
+        local hasAuto = EX.autoloadRead and EX.autoloadRead()
+        if get("rec_on", true) and EX.stateRestore and (crashed or (get("rec_always", true) and not hasAuto)) then
+            local ok, r = EX.stateRestore()
+            if ok then EX.Log("info", "recovery", (crashed and "restored after unclean exit" or "state restored") .. " (" .. tostring(r) .. " options)"); if crashed then notify("Recovery", "restored after unclean exit") end end
+        end
+        local t = 0
+        Conns[#Conns + 1] = RunService.Heartbeat:Connect(function(dt) t = t + dt; if t >= 10 then t = 0; pcall(EX.stateSave) end end)
+        EX.Log("info", "devtools", "ready")
+    end
+end
+
 AddPage("Rage", function(c1, c2)
     local g1 = CreateGroup(c1, "Ragebot"); CreateToggle(g1, "Ragebot", "rage_on", false); CreateKeybind(g1, "Ragebot Key", "rage_key", "Always", "Always"); CreateToggle(g1, "Wallbang", "rage_wall", false); CreateSlider(g1, "FOV", "rage_fov", 10, 360, 120); CreateSlider(g1, "FOV Size", "rage_fovsize", 10, 800, 720); CreateKeybind(g1, "Auto Shoot", "rage_autoshoot", "Always", "Always"); CreateToggle(g1, "Team Check", "rage_team", true)
     local g3 = CreateGroup(c1, "Kill All"); CreateToggle(g3, "Kill All", "ra_kill", false); CreateKeybind(g3, "Kill All Key", "ra_kill_key", "Always", "Always"); CreateToggle(g3, "Use Gun", "ra_kill_gun", true)
     local g2 = CreateGroup(c2, "Weapon Mods"); CreateToggle(g2, "Rapid Fire", "wpn_rapid", false); CreateToggle(g2, "No Recoil", "wpn_recoil", false); CreateToggle(g2, "No Spread", "wpn_spread", false); CreateToggle(g2, "Instant Reload", "wpn_reload", false); CreateToggle(g2, "Infinite Magazine", "wpn_ammo", false); CreateToggle(g2, "Custom Fire Cooldown", "wpn_cd", false); CreateSlider(g2, "Fire Cooldown (ms)", "wpn_cdval", 0, 1000, 500)
+    EX.wStatus = label(g2, {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Text = "Weapon scan: idle", TextSize = 11, TextColor3 = Theme.sub, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
+    EX.Btn(g2, "Rescan weapon fields", nil, function() EX.weaponRescan() end)
+    EX.Btn(g2, "Dump weapon candidates (F9)", nil, function() EX.dumpWeapon() end)
     local g4 = CreateGroup(c2, "Player"); CreateToggle(g4, "Auto Respawn", "ply_respawn", false)
 end)
 AddPage("Legit", function(c1, c2)
@@ -681,10 +1621,10 @@ AddPage("Legit", function(c1, c2)
 end)
 AddPage("Misc", function(c1, c2)
     local g1 = CreateGroup(c1, "Misc"); CreateToggle(g1, "Spectator list", "misc_spect", false); CreateToggle(g1, "Anti Spectate", "misc_antispect", false); CreateToggle(g1, "Anti AFK", "misc_afk", true); CreateToggle(g1, "Bhop", "misc_bhop", false); CreateSlider(g1, "Speed Per Jump", "bh_inc", 0, 10, 2); CreateSlider(g1, "Max Speed", "bh_max", 16, 100, 32); CreateToggle(g1, "No Jump Fatigue", "bh_fatigue", true)
-    local g3 = CreateGroup(c1, "Movement"); CreateToggle(g3, "Speed", "mv_speed", false); CreateKeybind(g3, "Speed Key", "mv_speed_key", "Always", "Always"); CreateSlider(g3, "Extra Speed", "mv_extra", 0, 50, 6); CreateToggle(g3, "Fly", "mv_fly", false); CreateKeybind(g3, "Fly Key", "mv_fly_key", "Always", "Always"); CreateSlider(g3, "Fly Speed", "mv_flyspeed", 10, 200, 60); CreateToggle(g3, "NoClip", "misc_noclip", false); CreateKeybind(g3, "NoClip Key", "misc_noclip_key", "Always", "Always")
+    local g3 = CreateGroup(c1, "Movement"); CreateToggle(g3, "Speed", "mv_speed", false); CreateKeybind(g3, "Speed Key", "mv_speed_key", "Always", "Always"); CreateSlider(g3, "Extra Speed", "mv_extra", 0, 50, 6); CreateToggle(g3, "Fly", "mv_fly", false); CreateKeybind(g3, "Fly Key", "mv_fly_key", "Always", "Always"); CreateSlider(g3, "Fly Speed", "mv_flyspeed", 10, 200, 60); CreateToggle(g3, "Noclip", "mv_noclip", false); CreateKeybind(g3, "Noclip Key", "mv_noclip_key", "Always", "Always")
     local g2 = CreateGroup(c2, "Camera"); CreateToggle(g2, "Third Person", "cam_third", false); CreateKeybind(g2, "Third Person Key", "cam_key", "V", "Toggle"); CreateSlider(g2, "ThirdPerson Distance", "cam_dist", 5, 50, 12)
 end)
-AddPage("Inventory Changer", function(c1, c2) local g1 = CreateGroup(c1, "Skins"); label(g1, {Size = UDim2.new(1, 0, 0, 20), Text = "Em breve...", TextSize = 14, TextColor3 = Theme.sub}) end)
+
 AddPage("Visuals", function(c1, c2)
     local g1 = CreateGroup(c1, "ESP"); CreateToggle(g1, "Enabled", "esp_on", true); CreateDropdown(g1, "Renderer", "esp_render", {"Full", "Lite"}, "Full"); CreateToggle(g1, "Box ESP", "esp_box", false); CreateToggle(g1, "ESP Name", "esp_name", false); CreateToggle(g1, "Skeleton", "esp_skel", false); CreateToggle(g1, "Weapon ESP", "esp_wpn", false); CreateToggle(g1, "ESP Team Check", "esp_team", true); CreateToggle(g1, "Health Bar", "esp_health", false); CreateToggle(g1, "Include NPCs", "esp_npc", true); CreateSlider(g1, "Max Distance", "esp_dist", 50, 2000, 1000); CreateToggle(g1, "Fade With Distance", "esp_fade", false); CreateToggle(g1, "Intro Animation", "esp_intro", false); CreateToggle(g1, "Distance", "esp_distance", false); CreateToggle(g1, "Head Dot", "esp_head", false); CreateToggle(g1, "Tracers", "esp_tracers", false); CreateDropdown(g1, "Tracer Origin", "esp_torigin", {"Bottom", "Center", "Mouse", "Top"}, "Bottom"); CreateToggle(g1, "Path Prediction", "esp_path", false); CreateSlider(g1, "Prediction Time (x0.1s)", "esp_ptime", 1, 50, 50); CreateSlider(g1, "Color (Hue)", "esp_hue", 0, 100, 99); CreateToggle(g1, "Rainbow", "esp_rainbow", false); CreateToggle(g1, "Team Color", "esp_teamcolor", false)
     local g4 = CreateGroup(c1, "Box"); CreateDropdown(g4, "Style", "esp_style", {"Full", "Corners", "Rounded", "3D"}, "Corners"); CreateSlider(g4, "Thickness", "esp_thick", 1, 6, 2); CreateSlider(g4, "Rounding", "esp_round", 0, 20, 6); CreateSlider(g4, "Fill %", "esp_fill", 0, 100, 50); CreateToggle(g4, "Outline", "esp_outline", false); CreateSlider(g4, "Size Smoothing %", "esp_smooth", 0, 100, 25)
@@ -694,180 +1634,17 @@ AddPage("Visuals", function(c1, c2)
     local g3 = CreateGroup(c2, "Tracers"); CreateToggle(g3, "Enable Tracers", "trc_on", false); CreateSlider(g3, "Tracer Width", "trc_width", 1, 10, 2); CreateSlider(g3, "Tracer Lifetime", "trc_life", 1, 10, 5)
 end)
 AddPage("World", function(c1, c2) local g1 = CreateGroup(c1, "Ambiente"); label(g1, {Size = UDim2.new(1, 0, 0, 20), Text = "Em breve...", TextSize = 14, TextColor3 = Theme.sub}) end)
-
--- ===== ECLYPSE THEME ENGINE: temas completos + efeitos animados =====
-EX.ThemePresets = {
-    Halloween = {bg=Color3.fromRGB(8,5,12), panel=Color3.fromRGB(18,10,24), card=Color3.fromRGB(29,16,35), track=Color3.fromRGB(48,27,54), stroke=Color3.fromRGB(83,43,74), accent=Color3.fromRGB(255,112,24), secondary=Color3.fromRGB(171,55,255)},
-    Midnight = {bg=Color3.fromRGB(5,8,18), panel=Color3.fromRGB(10,16,32), card=Color3.fromRGB(17,27,48), track=Color3.fromRGB(29,43,69), stroke=Color3.fromRGB(48,67,101), accent=Color3.fromRGB(91,125,255), secondary=Color3.fromRGB(46,220,255)},
-    Cyberpunk = {bg=Color3.fromRGB(8,5,18), panel=Color3.fromRGB(19,9,35), card=Color3.fromRGB(31,14,48), track=Color3.fromRGB(53,22,72), stroke=Color3.fromRGB(91,35,105), accent=Color3.fromRGB(255,45,190), secondary=Color3.fromRGB(30,245,255)},
-    Ocean = {bg=Color3.fromRGB(3,12,18), panel=Color3.fromRGB(6,24,34), card=Color3.fromRGB(10,39,52), track=Color3.fromRGB(18,58,73), stroke=Color3.fromRGB(30,83,98), accent=Color3.fromRGB(30,205,220), secondary=Color3.fromRGB(66,130,255)},
-    Sakura = {bg=Color3.fromRGB(18,8,16), panel=Color3.fromRGB(32,14,27), card=Color3.fromRGB(48,21,39), track=Color3.fromRGB(72,34,57), stroke=Color3.fromRGB(105,52,79), accent=Color3.fromRGB(255,112,177), secondary=Color3.fromRGB(255,205,225)},
-    Emerald = {bg=Color3.fromRGB(4,13,10), panel=Color3.fromRGB(8,25,18), card=Color3.fromRGB(14,39,27), track=Color3.fromRGB(24,58,39), stroke=Color3.fromRGB(40,86,57), accent=Color3.fromRGB(45,220,130), secondary=Color3.fromRGB(190,255,105)},
-    Crimson = {bg=Color3.fromRGB(14,4,7), panel=Color3.fromRGB(29,7,13), card=Color3.fromRGB(43,12,19), track=Color3.fromRGB(65,19,28), stroke=Color3.fromRGB(100,34,44), accent=Color3.fromRGB(255,42,67), secondary=Color3.fromRGB(255,145,70)},
-    Arctic = {bg=Color3.fromRGB(8,14,22), panel=Color3.fromRGB(15,27,39), card=Color3.fromRGB(24,42,57), track=Color3.fromRGB(37,61,78), stroke=Color3.fromRGB(59,91,111), accent=Color3.fromRGB(115,215,255), secondary=Color3.fromRGB(225,250,255)},
-    Sunset = {bg=Color3.fromRGB(17,7,12), panel=Color3.fromRGB(34,13,19), card=Color3.fromRGB(51,20,25), track=Color3.fromRGB(75,29,31), stroke=Color3.fromRGB(111,45,42), accent=Color3.fromRGB(255,105,65), secondary=Color3.fromRGB(255,205,75)}
-}
-EX.ThemeFX = nil
-function EX.applyVisualTheme(themeName)
-    local cfg = EX.ThemePresets[themeName]
-    if not cfg or not GUI or not GUI.Parent then return end
-    local old = {bg=Theme.bg, panel=Theme.panel, card=Theme.card, track=Theme.track, stroke=Theme.stroke, accent=Theme.accent}
-    local roots = {GUI, PlayerGui:FindFirstChild("DrxOverlay")}
-    for _, root in ipairs(roots) do
-        if root then
-            for _, d in ipairs(root:GetDescendants()) do
-                if d:IsA("GuiObject") then
-                    if d.BackgroundColor3 == old.bg then d.BackgroundColor3 = cfg.bg
-                    elseif d.BackgroundColor3 == old.panel then d.BackgroundColor3 = cfg.panel
-                    elseif d.BackgroundColor3 == old.card then d.BackgroundColor3 = cfg.card
-                    elseif d.BackgroundColor3 == old.track then d.BackgroundColor3 = cfg.track
-                    elseif d.BackgroundColor3 == old.accent then d.BackgroundColor3 = cfg.accent end
-                    if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
-                        if d.TextColor3 == old.accent then d.TextColor3 = cfg.accent end
-                    end
-                    if d:IsA("ScrollingFrame") and d.ScrollBarImageColor3 == old.accent then d.ScrollBarImageColor3 = cfg.accent end
-                    if d:IsA("ImageLabel") or d:IsA("ImageButton") then
-                        if d.ImageColor3 == old.accent then d.ImageColor3 = cfg.accent end
-                    end
-                elseif d:IsA("UIStroke") then
-                    if d.Color == old.stroke then d.Color = cfg.stroke
-                    elseif d.Color == old.accent then d.Color = cfg.accent end
-                end
-            end
-        end
-    end
-    Theme.bg, Theme.panel, Theme.card, Theme.track, Theme.stroke, Theme.accent =
-        cfg.bg, cfg.panel, cfg.card, cfg.track, cfg.stroke, cfg.accent
-    EX.Palette.bg, EX.Palette.panel, EX.Palette.card, EX.Palette.track, EX.Palette.stroke =
-        cfg.bg, cfg.panel, cfg.card, cfg.track, cfg.stroke
-    EX.AccentColor = cfg.accent
-    Prefs.set_acc_preset = "Personalizado"
-    Prefs.set_acc_r, Prefs.set_acc_g, Prefs.set_acc_b = math.floor(cfg.accent.R*255), math.floor(cfg.accent.G*255), math.floor(cfg.accent.B*255)
-
-    if EX.ThemeFX and EX.ThemeFX.Parent then EX.ThemeFX:Destroy() end
-    local fx = Instance.new("Folder")
-    fx.Name = "EclypseThemeFX"
-    fx.Parent = TopBar
-    EX.ThemeFX = fx
-
-    local line = Instance.new("Frame")
-    line.Name = "AnimatedThemeLine"
-    line.BorderSizePixel = 0
-    line.BackgroundColor3 = cfg.accent
-    line.Position = UDim2.new(0, 0, 1, -3)
-    line.Size = UDim2.new(1, 0, 0, 3)
-    line.ZIndex = 30
-    line.Parent = fx
-    local grad = Instance.new("UIGradient")
-    grad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, cfg.accent),
-        ColorSequenceKeypoint.new(0.5, cfg.secondary),
-        ColorSequenceKeypoint.new(1, cfg.accent)
-    })
-    grad.Offset = Vector2.new(-1, 0)
-    grad.Parent = line
-    TweenService:Create(grad, TweenInfo.new(2.8, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1, false), {Offset=Vector2.new(1,0)}):Play()
-
-    local border = Main:FindFirstChildOfClass("UIStroke")
-    if border then
-        local bg = border:FindFirstChild("ThemeGradient")
-        if bg then bg:Destroy() end
-        local borderGrad = Instance.new("UIGradient")
-        borderGrad.Name = "ThemeGradient"
-        borderGrad.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, cfg.accent),
-            ColorSequenceKeypoint.new(0.5, cfg.secondary),
-            ColorSequenceKeypoint.new(1, cfg.accent)
-        })
-        borderGrad.Parent = border
-        TweenService:Create(borderGrad, TweenInfo.new(5, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1, false), {Rotation=360}):Play()
-    end
-
-    -- Particulas discretas na barra: poucos objetos, sem loop por frame.
-    local rng = Random.new()
-    for i=1,7 do
-        local dot = Instance.new("Frame")
-        dot.Name = "ThemeSpark"..i
-        dot.BorderSizePixel = 0
-        dot.Size = UDim2.fromOffset(rng:NextInteger(2,4), rng:NextInteger(2,4))
-        dot.Position = UDim2.new(rng:NextNumber(0.05,0.95), 0, rng:NextNumber(0.15,0.8), 0)
-        dot.BackgroundColor3 = (i%2==0) and cfg.secondary or cfg.accent
-        dot.BackgroundTransparency = 0.15
-        dot.ZIndex = 25
-        dot.Parent = fx
-        local cr = Instance.new("UICorner"); cr.CornerRadius = UDim.new(1,0); cr.Parent = dot
-        local tw = TweenService:Create(dot, TweenInfo.new(rng:NextNumber(1.8,3.2), Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
-            Position = dot.Position + UDim2.fromOffset(rng:NextInteger(-12,12), rng:NextInteger(-9,9)),
-            BackgroundTransparency = 0.75
-        })
-        tw:Play()
-    end
-    -- Decoracao animada exclusiva para cada tema (topo e rodape).
-    local themeDecor = {
-        Halloween = {"🦇", "🎃", "🕸️", "🦇"},
-        Midnight = {"🌙", "✦", "星", "✧"},
-        Cyberpunk = {"⌁", "ネ", "◇", "⚡"},
-        Ocean = {"🐟", "🫧", "〰", "🐚"},
-        Sakura = {"🌸", "✿", "🌺", "❀"},
-        Emerald = {"🍃", "❧", "☘", "✦"},
-        Crimson = {"◆", "✦", "♦", "✧"},
-        Arctic = {"❄", "✧", "❅", "❄"},
-        Sunset = {"☀", "☁", "✦", "◒"}
-    }
-    local symbols = themeDecor[themeName] or themeDecor.Midnight
-    local deco = Instance.new("Frame")
-    deco.Name = "ThemeDecorFX"; deco.BackgroundTransparency = 1
-    deco.ClipsDescendants = true; deco.Size = UDim2.new(1, 0, 1, 0)
-    deco.ZIndex = 29; deco.Parent = fx
-    local rng = Random.new()
-    for i, symbol in ipairs(symbols) do
-        local item = Instance.new("TextLabel")
-        item.Name = "ThemeDecor" .. i; item.BackgroundTransparency = 1
-        item.Text = symbol; item.TextSize = (i % 2 == 0) and 17 or 14
-        item.TextColor3 = (i % 2 == 0) and cfg.secondary or cfg.accent
-        item.TextTransparency = 0.12; item.Size = UDim2.fromOffset(26, 24)
-        item.Position = UDim2.new(rng:NextNumber(0.12, 0.88), 0, rng:NextNumber(0.05, 0.65), 0)
-        item.Rotation = rng:NextInteger(-15, 15); item.ZIndex = 30; item.Active = false; item.Parent = deco
-        local drift = UDim2.new(rng:NextNumber(-0.08, 0.08), 0, rng:NextNumber(-0.12, 0.12), 0)
-        TweenService:Create(item, TweenInfo.new(rng:NextNumber(2.4, 4.2), Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
-            Position = item.Position + drift, Rotation = item.Rotation + rng:NextInteger(-18, 18),
-            TextTransparency = 0.48
-        }):Play()
-    end
-
-    -- Rodape da navegacao: usa os mesmos simbolos do tema e nao bloqueia cliques.
-    local oldNavFx = Sidebar:FindFirstChild("ThemeNavFX")
-    if oldNavFx then oldNavFx:Destroy() end
-    local navFx = Instance.new("Frame")
-    navFx.Name = "ThemeNavFX"; navFx.BackgroundTransparency = 1
-    navFx.Size = UDim2.fromScale(1, 1); navFx.ZIndex = 20; navFx.Parent = ThemeNavFooter
-    ThemeNavFooter.BackgroundColor3 = cfg.panel
-    ThemeNavFooterLine.BackgroundColor3 = cfg.accent
-    ThemeNavFooterTitle.TextColor3 = cfg.secondary
-    local footerSymbols = {symbols[1], symbols[2], symbols[3]}
-    for i, symbol in ipairs(footerSymbols) do
-        local item = Instance.new("TextLabel")
-        item.Name = "FooterDecor" .. i; item.BackgroundTransparency = 1
-        item.Text = symbol; item.TextSize = 15
-        item.TextColor3 = (i % 2 == 0) and cfg.secondary or cfg.accent
-        item.Size = UDim2.fromOffset(22, 20)
-        item.Position = UDim2.new((i - 1) * 0.34 + 0.08, 0, 0.52, -3)
-        item.AnchorPoint = Vector2.new(0, 0.5)
-        item.ZIndex = 21; item.Active = false; item.Parent = navFx
-        TweenService:Create(item, TweenInfo.new(1.8 + i * 0.35, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
-            Position = item.Position + UDim2.fromOffset(0, -7),
-            Rotation = (i % 2 == 0) and 12 or -12
-        }):Play()
-    end
-    if EX.decorate then pcall(EX.decorate, GUI) end
-end
--- ===== END THEME ENGINE =====
-
 AddPage("Configurações", function(c1, c2)
+    local gI = CreateGroup(c1, "Interface")
+    CreateDropdown(gI, "Language", "set_lang", {"English", "Português (BR)"}, "English")
+    EX.SearchDD(gI, "Theme", "set_theme", EX.ThemeNames, "Eclypse")
+    CreateSlider(gI, "UI Scale %", "set_uiscale", 60, 140, 100)
+    CreateToggle(gI, "Ambient Particles", "set_particles", true)
+    CreateToggle(gI, "Theme Effects", "set_fx", true)
     local g1 = CreateGroup(c1, "Universal Settings"); CreateToggle(g1, "Dynamic Island", "set_island", false); CreateToggle(g1, "Watermark HUD", "set_watermark", true); CreateToggle(g1, "Quick Access Keybind", "set_qaccess", false); CreateToggle(g1, "Mobile Toggle Button", "set_mobile", false); CreateKeybind(g1, "Menu Keybind", "misc_menukey", "RightShift", "Toggle")
     local g2 = CreateGroup(c2, "Screen Ambience"); CreateSlider(g2, "Ambience Opacity", "set_opacity", 10, 100, 50); CreateToggle(g2, "Show Only When UI...", "set_showonly", true)
     local g3 = CreateGroup(c2, "Cor do Fundo (RGB)"); CreateSlider(g3, "Fundo - Vermelho", "set_bg_r", 0, 160, 0); CreateSlider(g3, "Fundo - Verde", "set_bg_g", 0, 160, 0); CreateSlider(g3, "Fundo - Azul", "set_bg_b", 0, 160, 0)
-    local gAcc = CreateGroup(c2, "Temas Animados"); CreateDropdown(gAcc, "Tema Visual", "set_visual_theme", {"Halloween", "Midnight", "Cyberpunk", "Ocean", "Sakura", "Emerald", "Crimson", "Arctic", "Sunset"}, "Halloween"); CreateDropdown(gAcc, "Cor do Destaque", "set_acc_preset", {"Personalizado", "Vermelho", "Azul", "Roxo", "Verde", "Ciano", "Laranja", "Rosa", "Branco"}, "Personalizado"); CreateSlider(gAcc, "Menu - Vermelho", "set_acc_r", 0, 255, 255); CreateSlider(gAcc, "Menu - Verde", "set_acc_g", 0, 255, 40); CreateSlider(gAcc, "Menu - Azul", "set_acc_b", 0, 255, 60)
+    local gAcc = CreateGroup(c2, "Cor do Menu"); CreateDropdown(gAcc, "Tema", "set_acc_preset", {"Personalizado", "Vermelho", "Azul", "Roxo", "Verde", "Ciano", "Laranja", "Rosa", "Branco"}, "Personalizado"); CreateSlider(gAcc, "Menu - Vermelho", "set_acc_r", 0, 255, 255); CreateSlider(gAcc, "Menu - Verde", "set_acc_g", 0, 255, 40); CreateSlider(gAcc, "Menu - Azul", "set_acc_b", 0, 255, 60)
     local gHud = CreateGroup(c1, "HUD & Janela")
     CreateSlider(gHud, "Toggle Size", "set_tglsize", 30, 90, 44); CreateSlider(gHud, "Toggle Rounding %", "set_tglround", 0, 100, 100); CreateSlider(gHud, "Toggle Background %", "set_tglbg", 0, 100, 0)
     CreateToggle(gHud, "Toggle Glow", "set_tglglow", true); CreateSlider(gHud, "Glow Intensity", "set_tglglowi", 0, 100, 60); CreateToggle(gHud, "Lock Toggle Position", "set_tgllock", false)
@@ -879,6 +1656,8 @@ AddPage("Configurações", function(c1, c2)
     EX.Btn(gCfg, "Load Config", nil, function() EX.cfgLoad() end)
     EX.Btn(gCfg, "Delete Config", nil, function() EX.cfgDelete() end)
     EX.Btn(gCfg, "Refresh Configs", nil, function() EX.cfgRefresh() end)
+    EX.Btn(gCfg, "Load on start (autoload)", nil, function() EX.autoloadSet() end)
+    EX.autoloadLabel = label(gCfg, {Size = UDim2.new(1, 0, 0, 16), Text = "Autoload: None", TextSize = 11, TextColor3 = Theme.sub})
     EX.Btn(gCfg, "Export Config (copy)", nil, function() EX.cfgExport() end)
     EX.TextBox(gCfg, "Import Code", "cfg_code", "paste here", "")
     EX.Btn(gCfg, "Import Config", nil, function() EX.cfgImport() end)
@@ -890,7 +1669,6 @@ AddPage("Configurações", function(c1, c2)
     local gMenu = CreateGroup(c2, "Menu & Desempenho")
     CreateToggle(gMenu, "Click Sounds", "set_clicksnd", false); CreateSlider(gMenu, "ESP Rate (FPS)", "set_espfps", 15, 144, 60)
 end)
-pcall(EX.applyVisualTheme, get("set_visual_theme", "Halloween"))
 AddPage("Hitbox", function(c1, c2)
     local g1 = CreateGroup(c1, "Hitbox Expander")
     EX.Info(g1, "How Hitboxes Work", "Turn on Hide Hitbox so big boxes don't block your screen. Higher See-Through fades the box out.")
@@ -924,7 +1702,7 @@ AddPage("Safety", function(c1, c2)
     CreateToggle(g2, "Anti-Teleport", "sf_tp", false); CreateSlider(g2, "Teleport Distance", "sf_tpdist", 20, 500, 80)
     CreateToggle(g2, "Anti-Void", "sf_void", false); CreateSlider(g2, "Void Height", "sf_voidy", -500, 0, -100)
 end)
-AddNav("Rage"); AddNav("Legit"); AddNav("Hitbox"); AddNav("Misc"); AddNav("Bots"); AddNav("Safety"); AddNav("Inventory Changer"); AddNav("Visuals"); AddNav("World"); AddNav("Configurações"); SwitchPage("Rage")
+AddNav("Main"); AddNav("Rage"); AddNav("Legit"); AddNav("Hitbox"); AddNav("Misc"); AddNav("Bots"); AddNav("Safety"); AddNav("Skins"); AddNav("Gun Skins"); AddNav("Visuals"); AddNav("World"); AddNav("Game"); AddNav("Dev Tools"); AddNav("Configurações"); SwitchPage("Main")
 EX.step(52, "Loading modules...")
 
 -- ================== ENGINE V21 ==================
@@ -936,84 +1714,10 @@ local function guard(name, fn) return function(...)
     if not ok and not Warned[name] then Warned[name] = true; warn("[Eclypse] " .. name .. ": " .. tostring(err)) end
 end end
 local Cap = {mousemoverel = mousemoverel, mouse1click = mouse1click, hookmetamethod = hookmetamethod, newcclosure = newcclosure, checkcaller = checkcaller, getnamecallmethod = getnamecallmethod, setnamecallmethod = setnamecallmethod, getloadedmodules = getloadedmodules, require = require}
-local GameConfig = {Build = "UNSET", MatchGate = nil, Debug = true, Probe = true, Weapon = {ToolModule = nil, Fields = {NoRecoil = nil, NoSpread = nil, InstantReload = nil, InfiniteMagazine = nil, FireCooldown = nil}}, SpectateProbe = nil}
-
--- Roteador universal: identifica os dois jogos e aplica somente metadados/perfis seguros de interface.
--- Nao altera visibilidade de jogadores, mira, hitbox, armas, rede ou mecanismos anti-cheat.
-local GAME_PROFILES = {
-    [90568084448279] = {
-        Name = "Um Toque",
-        Build = "UNTOQUE",
-        VisualPreset = "Precision",
-        TrainingOnly = true,
-        Description = "Perfil de interface e treino local"
-    },
-    [84556640895285] = {
-        Name = "Arena de Deagle",
-        Build = "DEAGLE_ARENA",
-        VisualPreset = "Precision",
-        TrainingOnly = true,
-        Description = "Perfil de interface e treino local"
-    }
-}
-local GAME_PROFILES_BY_ID = {
-    -- GameId (game.GameId / universeId) confirmado por fonte publica; preencha Toggles quando souber o que ajuda nesse jogo.
-    [7633926880] = {Name = "BloxStrike", Build = "BLOXSTRIKE", VisualPreset = "Default", TrainingOnly = false, Description = "GameId confirmado; PlaceId e Toggles ainda nao confirmados", Toggles = {}},
-}
-local function detectGameProfile()
-    local placeId = game.PlaceId
-    local profile = GAME_PROFILES[placeId] or GAME_PROFILES_BY_ID[game.GameId]
-    if profile then
-        EX.GameProfile = profile
-        GameConfig.Build = profile.Build
-        print("[Eclypse] Jogo reconhecido: " .. profile.Name .. " | perfil: " .. profile.Description .. "  |  PlaceId=" .. tostring(game.PlaceId) .. "  GameId=" .. tostring(game.GameId))
-        if profile.Toggles then for k, v in pairs(profile.Toggles) do if Prefs[k] == nil then set(k, v) end end end
-    else
-        EX.GameProfile = {
-            Name = "Universal",
-            Build = "UNIVERSAL",
-            VisualPreset = "Default",
-            TrainingOnly = true,
-            Description = "Perfil universal seguro"
-        }
-        GameConfig.Build = "UNIVERSAL"
-        print("[Eclypse] Jogo nao cadastrado (PlaceId=" .. tostring(placeId) .. " GameId=" .. tostring(game.GameId) .. "); usando perfil universal. Me mande esses dois numeros e o que ajuda nesse jogo pra eu cadastrar um perfil de verdade.")
-    end
-    return EX.GameProfile
-end
-local ActiveGameProfile = detectGameProfile()
+local GameConfig = {Build = "UNSET", Debug = true, Probe = true, Weapon = {ToolModule = nil, Fields = {NoRecoil = nil, NoSpread = nil, InstantReload = nil, InfiniteMagazine = nil, FireCooldown = nil}}, SpectateProbe = nil}
 local Fire = {last = 0}
--- Ordem: 1) clique real do executor (mouse1click) - o unico caminho que simula um clique de verdade;
--- 2) Tool:Activate() - dispara a logica da arma equipada direto, funciona na maioria dos jogos mesmo sem clique real;
--- 3) clique falso mirado no CENTRO da tela (onde fica a mira), nunca mais em (0,0) - o fallback antigo quase nunca acertava a arma.
-EX.fireLog = EX.fireLog or {}
-local function logFirePath(path) if not EX.fireLog[path] then EX.fireLog[path] = true; print("[Eclypse] disparo via: " .. path) end end
-local function activateTool()
-    Fire.last = os.clock()
-    local c = LP.Character; local t = c and c:FindFirstChildOfClass("Tool")
-    if t then local ok = pcall(function() t:Activate() end); if ok then logFirePath("Tool:Activate()") end; return ok end
-    return false
-end
-local function clickFire()
-    Fire.last = os.clock()
-    if type(Cap.mouse1click) == "function" then
-        local ok = pcall(Cap.mouse1click)
-        if ok then logFirePath("mouse1click"); return end
-    end
-    if activateTool() then return end
-    -- V35: VirtualInputManager (clique no centro) antes do VirtualUser, que muitos jogos com mouse travado ignoram.
-    local okV = pcall(function()
-        local vim = game:GetService("VirtualInputManager"); local vsz = Workspace.CurrentCamera.ViewportSize
-        vim:SendMouseButtonEvent(vsz.X / 2, vsz.Y / 2, 0, true, game, 0); vim:SendMouseButtonEvent(vsz.X / 2, vsz.Y / 2, 0, false, game, 0)
-    end)
-    if okV then logFirePath("VirtualInputManager (centro da tela)"); return end
-    pcall(function()
-        local vp = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(800, 450)
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton1(Vector2.new(vp.X / 2, vp.Y / 2))
-        logFirePath("VirtualUser (centro da tela)")
-    end)
-end
+local function clickFire() Fire.last = os.clock(); if type(Cap.mouse1click) == "function" then local ok = pcall(Cap.mouse1click); if ok then return end end; pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new()) end) end
+local function activateTool() Fire.last = os.clock(); local c = LP.Character; local t = c and c:FindFirstChildOfClass("Tool"); if t then pcall(function() t:Activate() end) end end
 
 -- GetMouseDelta (aimbot sem mousemoverel) e Mouse.Hit/Target (silent) usam UM hook de __index, instalado so quando necessario
 local MouseDeltaHook = {installed = false, alive = true, pending = Vector2.new(0, 0)}
@@ -1036,7 +1740,7 @@ local function bindActive(k) local st = BindState[k]; return st ~= nil and st.on
 local FrameNo, NPCs, NPCInit = 0, {}, false
 local function initNPCs()
     if NPCInit then return end; NPCInit = true
-    local function consider(inst) if inst.ClassName == "Humanoid" then local m = inst.Parent; if m and m:IsA("Model") and m ~= LP.Character and not Players:GetPlayerFromCharacter(m) then NPCs[m] = true end end end
+    local function consider(inst) if inst.ClassName == "Humanoid" then local m = inst.Parent; if m and m:IsA("Model") and m ~= LP.Character and not Players:GetPlayerFromCharacter(m) and not m.Name:find("^EclypseBot") then NPCs[m] = true end end end
     Conns[#Conns + 1] = Workspace.DescendantAdded:Connect(consider)
     Conns[#Conns + 1] = Workspace.DescendantRemoving:Connect(function(d) if d.ClassName == "Humanoid" and d.Parent then NPCs[d.Parent] = nil end end)
     task.spawn(function()
@@ -1050,48 +1754,53 @@ local function initNPCs()
         end
     end)
 end
-local function isEnemyPlayer(plr)
-    if plr.Neutral or plr.Team == nil or LP.Team == nil then
-        -- Assumido: alguns jogos guardam o time num atributo "Team" em vez de Player.Team.
-        local a, b = plr:GetAttribute("Team"), LP:GetAttribute("Team")
-        if a ~= nil and b ~= nil then return a ~= b end
-        return true
-    end
-    return plr.Team ~= LP.Team
-end
--- Resolvedores genericos (ASSUMIDO: estrutura comum de personagem do Roblox). Sem novos locals de topo: ficam em EX (limite de 200 locais).
-EX.charBy, EX.charMiss = setmetatable({}, {__mode = "k"}), setmetatable({}, {__mode = "k"})
-EX.charOf = function(plr)
-    local c = plr.Character
-    if c and c.Parent then return c end
-    local cached = EX.charBy[plr]
-    if cached and cached.Parent then return cached end
-    local now = os.clock()
-    if EX.charMiss[plr] and now - EX.charMiss[plr] < 2 then return nil end
-    EX.charMiss[plr] = now
-    -- Jogos que nao usam Player.Character: procura um Model com o nome do jogador (no maximo a cada 2 s).
-    local m = Workspace:FindFirstChild(plr.Name, true)
-    if m and m:IsA("Model") then EX.charBy[plr] = m; return m end
+local isEnemyPlayer
+do
+local function teamKey(plr)
+    local P = EX.Profile
+    if P and type(P.teamOf) == "function" then local ok, v = pcall(P.teamOf, plr); if ok and v ~= nil then return tostring(v) end end
+    if plr.Team then return "T:" .. plr.Team.Name end
+    local a = plr:GetAttribute("Team"); if a == nil then a = plr:GetAttribute("TeamName") end
+    if a ~= nil then return "A:" .. tostring(a) end
     return nil
 end
-EX.rootOf = function(char)
-    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-        or char:FindFirstChild("Head") or char:FindFirstChildWhichIsA("BasePart")
+local function teamsInformative()
+    local now = os.clock(); if EX.teamInfoT and now - EX.teamInfoT < 1 then return EX.teamInfo end
+    EX.teamInfoT = now
+    local seen, n = {}, 0
+    for _, p in ipairs(Players:GetPlayers()) do local k = teamKey(p); if k and not seen[k] then seen[k] = true; n = n + 1 end end
+    EX.teamInfo = n >= 2; return EX.teamInfo
 end
-EX.healthOf = function(char, hum)
-    if hum then return hum end
-    local h, mh = char:GetAttribute("Health"), char:GetAttribute("MaxHealth")
-    if type(h) ~= "number" then local v = char:FindFirstChild("Health"); if v and v:IsA("ValueBase") and type(v.Value) == "number" then h = v.Value end end
-    local hp = (type(h) == "number") and h or 100
-    return {Health = hp, MaxHealth = (type(mh) == "number") and mh or math.max(hp, 100)}
+-- Se todos os jogadores caem no mesmo time (ou ninguem tem time), a informacao de time nao separa ninguem: ninguem e tratado como aliado.
+EX.teamKey, EX.teamsInformative = teamKey, teamsInformative
+isEnemyPlayer = function(plr)
+    if not teamsInformative() then return true end
+    local mine, theirs = teamKey(LP), teamKey(plr)
+    if mine == nil or theirs == nil then return true end
+    return mine ~= theirs
 end
-local function buildEntity(char, plr)
-    local hrp = EX.rootOf(char); if not hrp then return nil end
-    local realHum = char:FindFirstChildOfClass("Humanoid")
-    -- V35: personagem sem Humanoid (jogos com modelo proprio) vira entidade com vida lida de atributo/valor, em vez de ser ignorado.
-    local hum = EX.healthOf(char, realHum)
-    if hum.Health <= 0 then return nil end
-    return {char = char, hum = hum, hrp = hrp, plr = plr, name = plr and plr.Name or char.Name, realHumanoid = realHum ~= nil}
+end
+local buildEntity
+do
+local HEALTH_ATTRS, MAXHP_ATTRS = {"Health", "HP", "health", "hp"}, {"MaxHealth", "MaxHP", "maxHealth", "maxhp"}
+local function attrNum(inst, names) for _, n in ipairs(names) do local v = inst:GetAttribute(n); if type(v) == "number" then return v end end end
+local function healthOf(char, plr)
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then return hum, "Humanoid" end
+    local hp = attrNum(char, HEALTH_ATTRS) or (plr and attrNum(plr, HEALTH_ATTRS))
+    if not hp then local v = char:FindFirstChild("Health"); if v and v:IsA("ValueBase") and type(v.Value) == "number" then hp = v.Value end end
+    local mx = attrNum(char, MAXHP_ATTRS) or (plr and attrNum(plr, MAXHP_ATTRS)) or 100
+    if hp then return {Health = hp, MaxHealth = math.max(mx, hp, 1)}, "attribute" end
+    return {Health = 100, MaxHealth = 100, unknown = true}, "unknown"
+end
+buildEntity = function(char, plr)
+    if not char or not char.Parent then return nil, "character nil or unparented" end
+    local hum, src = healthOf(char, plr)
+    local hrp = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("Head") or char:FindFirstChildWhichIsA("BasePart", true)
+    if not hrp then return nil, "no root part (streamed out?)" end
+    if hum.Health <= 0 then return nil, "dead (" .. src .. ")" end
+    return {char = char, hum = hum, hrp = hrp, plr = plr, name = plr and plr.Name or char.Name, hpSource = src}, nil
+end
 end
 -- Heurística (assumida): NPC com atributo/valor "Team"/"TeamName" igual ao nome do meu time é aliado; sem informação = inimigo.
 local function npcEnemy(m)
@@ -1102,13 +1811,70 @@ local function npcEnemy(m)
     if typeof(v) == "Instance" or typeof(v) == "BrickColor" then v = v.Name end
     return tostring(v) ~= mine.Name
 end
+EX.EntDiag = {}
 local EntCache = {frame = -1, list = {}, byChar = {}}
-local function entities()
+local entities
+do
+local ModelIndex = {t = 0, map = {}}
+local function modelByName(plr)
+    local now = os.clock()
+    if now - ModelIndex.t > 2 then
+        ModelIndex.t = now; local map, n = {}, 0
+        for _, ch in ipairs(Workspace:GetChildren()) do
+            n = n + 1; if n > 4000 then break end
+            if ch:IsA("Model") then map[ch.Name] = map[ch.Name] or ch end
+            if ch:IsA("Folder") or (ch:IsA("Model") and not ch:FindFirstChildOfClass("Humanoid")) then
+                for _, g in ipairs(ch:GetChildren()) do n = n + 1; if g:IsA("Model") then map[g.Name] = map[g.Name] or g end end
+            end
+        end
+        ModelIndex.map = map
+    end
+    local m = ModelIndex.map[plr.Name] or ModelIndex.map[plr.DisplayName]
+    if m == LP.Character then return nil end
+    return m
+end
+entities = function()
     local _t = os.clock(); if EntCache.t and _t - EntCache.t < 0.033 then return EntCache.list end; EntCache.t = _t
-    local list, by = {}, {}
-    for _, plr in ipairs(Players:GetPlayers()) do if plr ~= LP then local pc = EX.charOf(plr); if pc then local e = buildEntity(pc, plr); if e then e.enemy = isEnemyPlayer(plr); list[#list + 1] = e; by[e.char] = e end end end end
-    if NPCInit then for m in pairs(NPCs) do if m.Parent and not Players:GetPlayerFromCharacter(m) then local e = buildEntity(m, nil); if e then e.enemy = npcEnemy(m); e.npc = true; list[#list + 1] = e; by[m] = e end else NPCs[m] = nil end end end
+    local list, by, diag = {}, {}, EX.EntDiag
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LP then
+            local char, how = plr.Character, "Player.Character"
+            if not (char and char.Parent) then
+                char, how = nil, nil
+                local P = EX.Profile
+                if P and type(P.resolveCharacter) == "function" then local ok, m = pcall(P.resolveCharacter, plr); if ok and typeof(m) == "Instance" then char, how = m, "profile.resolveCharacter" end end
+                if not char then char, how = modelByName(plr), "workspace name match" end
+            end
+            local e, why = buildEntity(char, plr)
+            if e then
+                e.enemy = isEnemyPlayer(plr); e.how = how; list[#list + 1] = e; by[e.char] = e
+                diag[plr.Name] = how .. " | hp:" .. e.hpSource .. " | enemy:" .. tostring(e.enemy)
+            else diag[plr.Name] = "REJECTED: " .. tostring(why) end
+        end
+    end
+    if NPCInit then
+        for m in pairs(NPCs) do
+            if m.Parent then
+                if not by[m] and not Players:GetPlayerFromCharacter(m) and not m.Name:find("^EclypseBot") then
+                    local e = buildEntity(m, nil); if e then e.enemy = npcEnemy(m); e.npc = true; list[#list + 1] = e; by[m] = e end
+                end
+            else NPCs[m] = nil end
+        end
+    end
     EntCache.frame = FrameNo; EntCache.list = list; EntCache.byChar = by; return list
+end
+end
+function EX.diagPlayers()
+    local lines = {"[Eclypse diag] profile=" .. tostring(EX.Profile and EX.Profile.label or "none") .. " PlaceId=" .. tostring(game.PlaceId) .. " teamsInformative=" .. tostring(EX.teamsInformative()) .. " myTeam=" .. tostring(EX.teamKey(LP)) .. " esp_team=" .. tostring(get("esp_team", true))}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LP then
+            local c = plr.Character
+            lines[#lines + 1] = string.format("  %s | team=%s | Character=%s | Humanoid=%s | result: %s", plr.Name, tostring(EX.teamKey(plr)), c and c:GetFullName() or "nil", c and tostring(c:FindFirstChildOfClass("Humanoid") ~= nil) or "-", tostring(EX.EntDiag[plr.Name] or "(not evaluated yet - turn an ESP option on)"))
+        end
+    end
+    local n = 0; for m in pairs(NPCs) do if m.Parent then n = n + 1 end end
+    lines[#lines + 1] = "  NPCs (Humanoid models outside Players): " .. n .. " (initNPCs ran: " .. tostring(NPCInit) .. ")"
+    EX.emit(table.concat(lines, "\n"), "ESP diagnostics")
 end
 local Track = {}
 EX.trackLast = 0
@@ -1117,29 +1883,17 @@ local function velocityOf(char, windowMs) local t = Track[char]; if not t or #t 
 
 local RayP = RaycastParams.new(); RayP.FilterType = Enum.RaycastFilterType.Exclude
 local function setFilter(extra) local f = {}; if LP.Character then f[#f + 1] = LP.Character end; if extra then f[#f + 1] = extra end; RayP.FilterDescendantsInstances = f end
-local WallP = RaycastParams.new(); WallP.FilterType = Enum.RaycastFilterType.Exclude; WallP.RespectCanCollide = false
+local WallP = RaycastParams.new(); WallP.FilterType = Enum.RaycastFilterType.Exclude; WallP.RespectCanCollide = true
 EX.visCache = setmetatable({}, {__mode = "k"})
 local function lineClear(cam, pos, char)
     local now = os.clock(); local c = char and EX.visCache[char]
     if c and now - c.t < 0.1 then return c.v end
-    -- V35: ignora pecas invisiveis (Transparency >= 0.9) e outros personagens (companheiros nao bloqueiam); ate 6 raios.
-    local origin = cam.CFrame.Position; local dir = pos - origin
-    local f = {}; if LP.Character then f[#f + 1] = LP.Character end; if char then f[#f + 1] = char end
-    local v = false
-    for _ = 1, 6 do
-        WallP.FilterDescendantsInstances = f
-        local r = Workspace:Raycast(origin, dir, WallP)
-        if not r then v = true; break end
-        local inst = r.Instance
-        local m, owned = inst, false
-        while m and m ~= Workspace do if EntCache.byChar[m] then owned = true; break end; m = m.Parent end
-        if inst.Transparency < 0.9 and not owned then v = false; break end
-        f[#f + 1] = inst
-    end
+    local f = {}; if LP.Character then f[#f + 1] = LP.Character end; if char then f[#f + 1] = char end; WallP.FilterDescendantsInstances = f
+    local v = Workspace:Raycast(cam.CFrame.Position, pos - cam.CFrame.Position, WallP) == nil
     if char then EX.visCache[char] = {t = now, v = v} end
     return v
 end
-local function getPart(char, which) if which == "Head" then return char:FindFirstChild("Head") elseif which == "Torso" then return char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") end; return EX.rootOf(char) end
+local function getPart(char, which) if which == "Head" then return char:FindFirstChild("Head") elseif which == "Torso" then return char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") end; return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") end
 local Jitter = setmetatable({}, {__mode = "k"})
 local function jitterFor(char, size) local j, now = Jitter[char], os.clock(); if not j or now - j.t > 0.25 then j = {t = now, v = Vector3.new(math.random() * 2 - 1, math.random() * 2 - 1, math.random() * 2 - 1) * size}; Jitter[char] = j end; return j.v end
 
@@ -1208,32 +1962,21 @@ function EX.pickTargetCached(key, o)
     local r = pickTarget(o); EX.pickCache[key] = {t = now, r = r or false}; return r
 end
 local function stepAlpha(a60, dt) return 1 - (1 - math.clamp(a60, 0, 1)) ^ (math.clamp(dt, 0, 0.1) * 60) end
--- V35: controle em malha fechada. Usa mousemoverel enquanto o erro em pixels diminui; se por ~25 quadros nao diminui (ou o executor
--- nao tem mousemoverel), passa a mover a camera direto.
-EX.AimCtl = {prevErr = nil, bad = 0, forceCam = false}
-local function aimStep(target, alpha, dt)
-    local cam = Workspace.CurrentCamera
-    if not cam then return end
-    local a = math.clamp(alpha, 0, 1)
-    local C = EX.AimCtl
-    if type(Cap.mousemoverel) ~= "function" or C.forceCam then
-        cam.CFrame = cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position, target.pos), a)
-        return
+local function aimStep(target, alpha)
+    local cam = Workspace.CurrentCamera; if not cam then return end
+    local v, on = cam:WorldToViewportPoint(target.pos); local vs = cam.ViewportSize
+    if on and type(Cap.mousemoverel) == "function" then
+        local dx, dy = (v.X - vs.X / 2) * alpha, (v.Y - vs.Y / 2) * alpha; local mag = math.sqrt(dx * dx + dy * dy); if mag > 80 then dx, dy = dx / mag * 80, dy / mag * 80 end
+        if pcall(Cap.mousemoverel, dx, dy) then return end
     end
-    local v, on = cam:WorldToViewportPoint(target.pos)
-    if not on then return end
-    local vs = cam.ViewportSize
-    local ex, ey = v.X - vs.X * 0.5, v.Y - vs.Y * 0.5
-    local err = math.sqrt(ex * ex + ey * ey)
-    if C.prevErr and err > 4 and err > C.prevErr - 0.5 then C.bad = C.bad + 1 else C.bad = math.max(C.bad - 1, 0) end
-    C.prevErr = err
-    if C.bad >= 25 then C.forceCam = true; print("[Eclypse] mousemoverel nao aproxima a mira neste jogo; usando a camera direto.") end
-    local dx, dy = ex * a, ey * a
-    local frameScale = math.clamp((dt or 1/60) * 60, 0, 1.5)
-    local mag = math.sqrt(dx * dx + dy * dy)
-    local maxStep = 10 * frameScale
-    if mag > maxStep and mag > 0 then dx, dy = dx / mag * maxStep, dy / mag * maxStep end
-    if math.abs(dx) + math.abs(dy) > 0.01 then pcall(Cap.mousemoverel, dx, dy) end
+    local a = alpha
+    if on and not MouseDeltaHook.installed and ensureIndexHook then ensureIndexHook() end
+    if on and MouseDeltaHook.installed then
+        local p = MouseDeltaHook.pending + Vector2.new((v.X - vs.X / 2) * alpha * 0.5, (v.Y - vs.Y / 2) * alpha * 0.5)
+        if p.Magnitude > 150 then p = p.Unit * 150 end
+        MouseDeltaHook.pending = p; a = alpha * 0.5
+    end
+    cam.CFrame = cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position, target.pos), a)
 end
 
 local Aim = {char = nil, since = 0}
@@ -1351,7 +2094,7 @@ local Rage, Kill = {last = 0}, {last = 0}
 local function runRage(cam, dt)
     if not (get("rage_on") and bindActive("rage_key")) then return end
     local t = EX.pickTargetCached("rage", {part = "Head", radius = getNum("rage_fovsize", 720), maxDist = 5000, angle = getNum("rage_fov", 120), wall = not get("rage_wall", false), prio = "Cursor", wc = 1, wd = 0, wf = 0, offscreen = true, predict = false, sample = 100, jitter = 0, teamCheck = get("rage_team", true)})
-    if not t then return end; aimStep(t, stepAlpha(0.5, dt), dt)
+    if not t then return end; aimStep(t, stepAlpha(0.5, dt))
     if bindActive("rage_autoshoot") and t.cursor < 25 then local gap = get("wpn_rapid") and 0.03 or 0.08; if os.clock() - Rage.last > gap then Rage.last = os.clock(); clickFire() end end
 end
 local function runKillAll(cam, dt)
@@ -1396,7 +2139,7 @@ local function runTrigger(cam, dt)
 end
 
 local Patched, WeaponWarned = {}, {}
-local AutoW = {list = {}, seen = setmetatable({}, {__mode = "k"}), mods = {}, last = 0, lmLast = 0, n = 0, t0 = 0, mask = "", modDone = setmetatable({}, {__mode = "k"}), scans = 0, found = {}, warned = {}, busy = false, sig = nil, tries = 0}
+local AutoW = {list = {}, seen = setmetatable({}, {__mode = "k"}), mods = {}, last = 0, lmLast = 0, n = 0, t0 = 0, mask = "", modDone = setmetatable({}, {__mode = "k"}), scans = 0, found = {}, warned = {}}
 -- Regras HEURÍSTICAS por nome de campo (lido do jogo em runtime; nada é hardcoded de build). Valores aplicados: 0 / 999 / slider.
 local WEAPON_RULES = {
     {pref = "wpn_recoil", label = "No Recoil", test = function(k) return k:find("recoil") ~= nil end, value = function() return 0 end},
@@ -1429,8 +2172,8 @@ local function scanTable(tbl, depth, visited, path)
     if visited[tbl] then return end; visited[tbl] = true
     local cnt = 0
     for k, v in pairs(tbl) do
-        cnt = cnt + 1; if cnt > 3000 then break end
-        AutoW.n = AutoW.n + 1; if AutoW.n % 200 == 0 and os.clock() - AutoW.t0 > 0.003 then task.wait(); AutoW.t0 = os.clock() end
+        cnt = cnt + 1; if cnt > 1200 then break end
+        AutoW.n = AutoW.n + 1; if AutoW.n % 200 == 0 and os.clock() - AutoW.t0 > 0.0015 then task.wait(); AutoW.t0 = os.clock() end
         if type(k) == "string" then
             if type(v) == "number" then local r = ruleFor(k); if r then addEntry("tbl", tbl, k, r, path .. "." .. k) end
             elseif type(v) == "table" and depth < 2 then scanTable(v, depth + 1, visited, path .. "." .. k) end
@@ -1473,7 +2216,7 @@ local function dumpWeaponCandidates(tool)
     local function consider(path, tbl, depth, visited)
         if visited[tbl] or shown >= 120 then return end; visited[tbl] = true
         for k, v in pairs(tbl) do
-            AutoW.n = AutoW.n + 1; if AutoW.n % 200 == 0 and os.clock() - AutoW.t0 > 0.003 then task.wait(); AutoW.t0 = os.clock() end
+            AutoW.n = AutoW.n + 1; if AutoW.n % 200 == 0 and os.clock() - AutoW.t0 > 0.0015 then task.wait(); AutoW.t0 = os.clock() end
             if type(k) == "string" and shown < 120 then
                 if type(v) == "number" then
                     local lk = k:lower()
@@ -1503,7 +2246,7 @@ local function restoreWeapon()
     for _, e in ipairs(AutoW.list) do pcall(writeRef, e, e.orig) end; AutoW.list = {}
 end
 local function weaponScanJob(tool, char)
-    AutoW.scans = AutoW.scans + 1; AutoW.t0 = os.clock()
+    AutoW.scans = AutoW.scans + 1; AutoW.t0 = os.clock(); AutoW.reqCount = 0; AutoW.start = os.clock()
     AutoW.loadedSet, AutoW.byName = nil, nil
     local loaded
     if type(Cap.getloadedmodules) == "function" then
@@ -1530,34 +2273,14 @@ local function weaponScanJob(tool, char)
     if loaded and type(Cap.require) == "function" then
         for i, m in ipairs(loaded) do
             if not UiMouse.alive then return end
-            if typeof(m) == "Instance" and not AutoW.modDone[m] then
+            if typeof(m) == "Instance" and not AutoW.modDone[m] and AutoW.reqCount < 150 and os.clock() - AutoW.start < 6 then
                 AutoW.modDone[m] = true
                 if weaponishModule(m) then
-                    local ok2, t = pcall(Cap.require, m)
+                    AutoW.reqCount = AutoW.reqCount + 1; local ok2, t = pcall(Cap.require, m)
                     if ok2 and type(t) == "table" then pcall(scanTable, t, 0, {}, m:GetFullName()) end
                 end
             end
-            if i % 40 == 0 and os.clock() - AutoW.t0 > 0.003 then task.wait(); AutoW.t0 = os.clock() end
-        end
-    end
-    -- V35: executores sem getloadedmodules: varre tabelas vivas (getgc) que parecem config de arma (>= 2 marcadores) e passa pelo mesmo scanTable/regras.
-    if type(getgc) == "function" and AutoW.gcSig ~= AutoW.sig then
-        AutoW.gcSig = AutoW.sig
-        local okg, objs = pcall(getgc, true)
-        if okg and type(objs) == "table" then
-            local marks, seenT = {"damage", "ammo", "recoil", "spread", "reload", "firerate", "cooldown", "magazine", "bullet", "range"}, {}
-            seenT[Prefs] = true
-            for i = 1, math.min(#objs, 80000) do
-                if not UiMouse.alive then return end
-                local o = objs[i]
-                if type(o) == "table" and getmetatable(o) == nil and not seenT[o] then
-                    local hits, n = {}, 0
-                    pcall(function() for k in pairs(o) do n = n + 1; if n > 120 then break end; if type(k) == "string" then local lk = k:lower(); for _, m in ipairs(marks) do if lk:find(m, 1, true) then hits[m] = true end end end end end)
-                    local c = 0; for _ in pairs(hits) do c = c + 1 end
-                    if c >= 2 then pcall(scanTable, o, 0, seenT, "gc") end
-                end
-                if i % 4000 == 0 then task.wait(); AutoW.t0 = os.clock() end
-            end
+            if i % 40 == 0 and os.clock() - AutoW.t0 > 0.0015 then task.wait(); AutoW.t0 = os.clock() end
         end
     end
     for _, rule in ipairs(WEAPON_RULES) do
@@ -1585,14 +2308,19 @@ local function weaponPatchTick()
             end
         end
     end
-    -- 2) descoberta automatica (weaponScanJob), so quando algo muda: nunca redundante, nunca todo quadro.
-    local maskS = ""; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then maskS = maskS .. r.pref end end
-    local anyOn = maskS ~= ""
-    local sig = (tool and tool.Name or "-") .. "|" .. maskS
-    if AutoW.sig ~= sig then AutoW.sig = sig; AutoW.tries = 0; AutoW.last = 0 end
-    if anyOn and not AutoW.busy and AutoW.tries < 2 and os.clock() - AutoW.last > 6 then
-        AutoW.tries = AutoW.tries + 1; AutoW.last = os.clock(); AutoW.busy = true
-        task.spawn(function() pcall(weaponScanJob, tool, char); AutoW.busy = false end)
+    -- 2) descoberta automática por nome de campo (em thread separada: nunca varre no frame do Heartbeat)
+    local anyOn = false; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then anyOn = true end end
+    local maskNow = ""; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then maskNow = maskNow .. r.pref end end
+    local vmNow = ""; local cam0 = Workspace.CurrentCamera; if cam0 then for _, c in ipairs(cam0:GetChildren()) do if c:IsA("Model") then vmNow = vmNow .. c.Name end end end
+    local changed = AutoW.lastTool ~= (tool or false) or AutoW.lastMask ~= maskNow or AutoW.lastVM ~= vmNow or AutoW.force
+    if anyOn and not AutoW.busy and changed and os.clock() - AutoW.last > 3 then
+        AutoW.lastTool, AutoW.lastMask, AutoW.lastVM, AutoW.force = (tool or false), maskNow, vmNow, false
+        AutoW.busy = true
+        task.spawn(function()
+            local okc, errc = pcall(weaponScanJob, tool, char)
+            AutoW.last = os.clock(); AutoW.busy = false
+            if not okc and not AutoW.warned.job then AutoW.warned.job = true; warn("[Eclypse] varredura de armas: " .. tostring(errc)) end
+        end)
     end
     for i = #AutoW.list, 1, -1 do
         local e = AutoW.list[i]; local on = get(e.rule.pref, false)
@@ -1602,7 +2330,17 @@ local function weaponPatchTick()
     end
 end
 
+function EX.weaponStatus()
+    local parts = {}
+    for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then parts[#parts + 1] = r.label .. ": " .. (AutoW.found[r.pref] and "field found" or "no field found") end end
+    if #parts == 0 then return "Weapon scan: idle (no weapon mod enabled)" end
+    return "Weapon scan " .. (AutoW.busy and "running" or "idle") .. " | scans: " .. AutoW.scans .. " | patched fields: " .. #AutoW.list .. "\n" .. table.concat(parts, " | ")
+end
+function EX.weaponRescan() AutoW.force = true; AutoW.last = 0; AutoW.warned = {}; AutoW.dumped = false; AutoW.modDone = setmetatable({}, {__mode = "k"}); notify("Weapons", "rescan queued") end
+function EX.dumpWeapon() local ch = LP.Character; dumpWeaponCandidates(ch and ch:FindFirstChildOfClass("Tool")) end
+
 local ESP, BONES15, BONES6, EDGES = {}, {{"Head","UpperTorso"},{"UpperTorso","LowerTorso"},{"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"}}, {{"Head","Torso"},{"Torso","Left Arm"},{"Torso","Right Arm"},{"Torso","Left Leg"},{"Torso","Right Leg"}}, {{1,2},{3,4},{5,6},{7,8},{1,3},{2,4},{5,7},{6,8},{1,5},{2,6},{3,7},{4,8}}
+function EX.countESP() local n = 0; for _ in pairs(ESP) do n = n + 1 end; return n end
 local function mk(e, cls, props) local i = new(cls, props, Overlay); e.All[#e.All + 1] = i; return i end
 local function lineAt(e, list, i) local l = list[i]; if not l then l = mk(e, "Frame", {AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0, Visible = false}); list[i] = l end; return l end
 local function drawLine(l, a, b, thick, color, transp, z) local d = b - a; l.Size = UDim2.fromOffset(d.Magnitude, thick); l.Position = UDim2.fromOffset((a.X + b.X) / 2, (a.Y + b.Y) / 2); l.Rotation = math.deg(math.atan2(d.Y, d.X)); l.BackgroundColor3 = color; l.BackgroundTransparency = transp; l.ZIndex = z or 1; l.Visible = true end
@@ -1731,6 +2469,7 @@ function EX.toast(title, sub)
     task.delay(life, dismiss)
 end
 notify = function(title, sub)
+    pcall(EX.Log, "info", tostring(title), tostring(sub))
     if get("set_island") then
         local text = title .. (sub and (": " .. sub) or ""); Hud.islandText.Text = text; local w = TextService:GetTextSize(text, 12, Enum.Font.GothamBold, Vector2.new(600, 30)).X + 30; tween(Hud.island, {Size = UDim2.fromOffset(math.max(w, 150), 28)}); Hud.islandBusy = os.clock() + 2; Hud.lastIsl = nil
     else
@@ -1755,26 +2494,15 @@ do
 end
 
 local currentSpectators
-local HB = {slow = 0, mid = 0, hud = 0, boost = 0, lastHop = 0, tp = false, respawn = 0, bv = nil, paused = false, jump = setmetatable({}, {__mode = "k"}), vim = nil, noclip = setmetatable({}, {__mode = "k"})}
+local HB = {slow = 0, mid = 0, hud = 0, boost = 0, lastHop = 0, tp = false, respawn = 0, bv = nil, paused = false, jump = setmetatable({}, {__mode = "k"}), vim = nil}
 local fpsAvg = 60
 local function stopFly() if HB.bv then pcall(function() HB.bv:Destroy() end); HB.bv = nil end end
-local function noclipRestore(char)
-    local st = HB.noclip[char]; if not st then return end
-    for part, orig in pairs(st.parts) do if part.Parent then pcall(function() part.CanCollide = orig end) end end
-    HB.noclip[char] = nil
-end
-local function noclipRestoreAll() for char in pairs(HB.noclip) do noclipRestore(char) end end
 local function onHeartbeat(dt)
     local char = LP.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); local hrp = char and char:FindFirstChild("HumanoidRootPart"); local cam = Workspace.CurrentCamera
     HB.slow = HB.slow + dt; HB.mid = HB.mid + dt; HB.hud = HB.hud + dt
     if get("ply_respawn") and (not hum or hum.Health <= 0) and os.clock() - HB.respawn > 0.3 then HB.respawn = os.clock(); pcall(function() HB.vim = HB.vim or game:GetService("VirtualInputManager"); HB.vim:SendKeyEvent(true, Enum.KeyCode.Space, false, game); task.delay(0.05, function() pcall(function() HB.vim:SendKeyEvent(false, Enum.KeyCode.Space, false, game) end) end) end) end
     if hum and hrp and hum.Health > 0 and cam then
         local b = HB.jump[hum]; if not b then b = {jp = hum.JumpPower, jh = hum.JumpHeight}; HB.jump[hum] = b end; local typing = UserInputService:GetFocusedTextBox() ~= nil
-        local wantNoclip = get("misc_noclip") and bindActive("misc_noclip_key")
-        if wantNoclip and not HB.paused then
-            local st = HB.noclip[char]; if not st then st = {parts = {}}; HB.noclip[char] = st end
-            for part in pairs(st.parts) do if part.Parent and part.CanCollide then part.CanCollide = false end end
-        else noclipRestore(char) end
         if not HB.paused then
             if get("bh_fatigue") then if hum.UseJumpPower then if hum.JumpPower < b.jp then hum.JumpPower = b.jp end elseif hum.JumpHeight < b.jh then hum.JumpHeight = b.jh end end
             if get("mv_speed") and bindActive("mv_speed_key") and hum.MoveDirection.Magnitude > 0.1 then hrp.CFrame = hrp.CFrame + hum.MoveDirection * getNum("mv_extra", 6) * dt end
@@ -1785,18 +2513,25 @@ local function onHeartbeat(dt)
                 HB.bv.Velocity = (dir.Magnitude > 0) and dir.Unit * getNum("mv_flyspeed", 60) or Vector3.new(0, 0, 0)
             else stopFly() end
         else stopFly() end
-    else stopFly(); noclipRestoreAll() end
-    if HB.mid >= 0.1 then HB.mid = 0
-        if get("misc_noclip") and bindActive("misc_noclip_key") and not HB.paused and char then
-            local st = HB.noclip[char]; if not st then st = {parts = {}}; HB.noclip[char] = st end
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") and part.CanCollide and st.parts[part] == nil then st.parts[part] = true; part.CanCollide = false end
-            end
-        end
-        local active = get("cam_third") and bindActive("cam_key"); if active then local d = getNum("cam_dist", 12); LP.CameraMode = Enum.CameraMode.Classic; LP.CameraMaxZoomDistance = d; LP.CameraMinZoomDistance = d; HB.tp = true elseif HB.tp then HB.tp = false; LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end end
-    if HB.slow >= 0.5 then HB.slow = 0; local want = get("misc_spect") or get("misc_antispect"); if want and os.clock() - (HB.specAt or 0) > 1.5 then HB.specAt = os.clock(); HB.specs = currentSpectators() end; local specs = want and (HB.specs or {}) or {}; if get("misc_spect") and #specs > 0 then Hud.spec.Text = "Spectators\n" .. table.concat(specs, "\n"); Hud.spec.Visible = true else Hud.spec.Visible = false end; local pause = get("misc_antispect") and #specs > 0; if pause ~= HB.paused then HB.paused = pause; notify("Anti Spectate", pause and "features paused" or "features resumed") end end
+    else stopFly() end
+    if HB.mid >= 0.1 then HB.mid = 0; local active = get("cam_third") and bindActive("cam_key"); if active then local d = getNum("cam_dist", 12); LP.CameraMode = Enum.CameraMode.Classic; LP.CameraMaxZoomDistance = d; LP.CameraMinZoomDistance = d; HB.tp = true elseif HB.tp then HB.tp = false; LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end end
+    if HB.slow >= 0.5 then HB.slow = 0; EX.timed("weaponPatchTick", weaponPatchTick); local want = get("misc_spect") or get("misc_antispect"); if want and os.clock() - (HB.specAt or 0) > 1.5 then HB.specAt = os.clock(); HB.specs = currentSpectators() end; local specs = want and (HB.specs or {}) or {}; if get("misc_spect") and #specs > 0 then Hud.spec.Text = "Spectators\n" .. table.concat(specs, "\n"); Hud.spec.Visible = true else Hud.spec.Visible = false end; local pause = get("misc_antispect") and #specs > 0; if pause ~= HB.paused then HB.paused = pause; notify("Anti Spectate", pause and "features paused" or "features resumed") end end
     if HB.hud >= 0.2 then HB.hud = 0; EX.timed("updateHud", updateHud, fpsAvg) end
 end
+
+EX.noclipOrig = setmetatable({}, {__mode = "k"})
+function EX.noclipRestore()
+    for part in pairs(EX.noclipOrig) do if part.Parent then pcall(function() part.CanCollide = true end) end; EX.noclipOrig[part] = nil end
+end
+Conns[#Conns + 1] = RunService.Stepped:Connect(function()
+    local char = LP.Character
+    if get("mv_noclip") and bindActive("mv_noclip_key") and char and not HB.paused then
+        for _, p in ipairs(char:GetChildren()) do
+            if p:IsA("BasePart") and p.CanCollide then EX.noclipOrig[p] = true; p.CanCollide = false end
+        end
+        EX.noclipOn = true
+    elseif EX.noclipOn then EX.noclipOn = false; EX.noclipRestore() end
+end)
 
 local function makeCircle() local f = new("Frame", {Size = UDim2.fromOffset(100, 100), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, Visible = false}, Overlay); new("UICorner", {CornerRadius = UDim.new(1, 0)}, f); new("UIStroke", {Thickness = 1, Color = Theme.accent}, f); return f end
 local fovCircle, aimCircle = makeCircle(), makeCircle()
@@ -1845,7 +2580,7 @@ do
             end
         end
         for _, fn in pairs(EX.Refresh) do pcall(fn) end
-        pcall(EX.applyBackground); pcall(EX.applyAccent); pcall(EX.styleToggle)
+        pcall(EX.applyBackground); pcall(EX.applyAccent); pcall(EX.styleToggle); pcall(EX.applyTheme, true); pcall(EX.applyLanguage); pcall(EX.applyScale)
         return n
     end
     local function cfgNames()
@@ -1868,6 +2603,7 @@ do
         else MemCfg[name] = json end
         EX.cfgRefresh(); Prefs.cfg_pick = name; if EX.Refresh.cfg_pick then EX.Refresh.cfg_pick() end
         notify("Config", "saved: " .. name)
+        pcall(EX.verSave, "auto-on-save")
     end
     function EX.cfgLoad()
         local name = cfgClean(get("cfg_pick", "")); if name == "" then notify("Config", "pick a config first"); return end
@@ -1898,10 +2634,112 @@ do
     function EX.resetAll()
         for k, v in pairs(EX.Defaults) do if type(v) == "table" then Prefs[k] = {Key = v.Key, Mode = v.Mode} else Prefs[k] = v end end
         for _, fn in pairs(EX.Refresh) do pcall(fn) end
-        pcall(EX.applyBackground); pcall(EX.applyAccent); pcall(EX.styleToggle)
+        pcall(EX.applyBackground); pcall(EX.applyAccent); pcall(EX.styleToggle); pcall(EX.applyTheme, true); pcall(EX.applyLanguage); pcall(EX.applyScale)
         notify("Settings", "reset to defaults")
     end
     function EX.copyInvite() local B = EX.Brand; local ok = pcall(function() setclipboard(B.invite) end); notify("Discord", ok and "invite copied" or B.invite) end
+    local AUTO_FILE = "Eclypse/autoload.txt"
+    function EX.autoloadRead()
+        if not hasFS or type(isfile) ~= "function" then return nil end
+        local ok, s = pcall(function() if isfile(AUTO_FILE) then return readfile(AUTO_FILE) end end)
+        if ok and type(s) == "string" and s ~= "" then return cfgClean(s) end
+    end
+    function EX.autoloadShow() if EX.autoloadLabel then EX.autoloadLabel.Text = "Autoload: " .. (EX.autoloadRead() or "None") end end
+    function EX.autoloadSet()
+        local name = cfgClean(get("cfg_pick", "")); if name == "" then notify("Autoload", "pick a config first"); return end
+        if not hasFS then notify("Autoload", "needs file support in the executor"); return end
+        local ok = pcall(function() if not isfolder("Eclypse") then makefolder("Eclypse") end; writefile(AUTO_FILE, name) end)
+        notify("Autoload", ok and ("set: " .. name) or "could not write file"); EX.autoloadShow()
+    end
+    function EX.autoloadRun() local n = EX.autoloadRead(); if n then Prefs.cfg_pick = n; EX.cfgLoad() end; EX.autoloadShow() end
+    EX.VER_DIR, EX.VER_KEEP, EX.VerMem = CFG_DIR .. "/versions", 25, (shared.EclypseVerMem or {})
+    shared.EclypseVerMem = EX.VerMem
+    function EX.verBase() local n = cfgClean(get("cfg_pick", "")); if n == "" then n = cfgClean(get("cfg_name", "")) end; if n == "" then n = "unsaved" end; return n end
+    function EX.verList()
+        local base, out = EX.verBase(), {}
+        if hasFS then
+            pcall(function() if not isfolder("Eclypse") then makefolder("Eclypse") end; if not isfolder(CFG_DIR) then makefolder(CFG_DIR) end; if not isfolder(EX.VER_DIR) then makefolder(EX.VER_DIR) end end)
+            local ok, files = pcall(listfiles, EX.VER_DIR)
+            if ok and type(files) == "table" then for _, f in ipairs(files) do local n = tostring(f):match("([^/\\]+)%.json$"); if n and n:sub(1, #base + 2) == base .. "__" then out[#out + 1] = n end end end
+        else for n in pairs(EX.VerMem) do if n:sub(1, #base + 2) == base .. "__" then out[#out + 1] = n end end end
+        table.sort(out, function(a, b) return a > b end); return out
+    end
+    function EX.verRefresh() if EX.verPick then EX.verPick.setOptions(EX.verList()) end end
+    function EX.verSave(tag)
+        EX.verSeq = (EX.verSeq or 0) + 1
+        local name = string.format("%s__%s-%02d", EX.verBase(), os.date("%Y%m%d-%H%M%S"), EX.verSeq % 100)
+        local okJ, json = pcall(function() return HttpService:JSONEncode({schema = 1, build = tostring(GameConfig.Build), saved = os.time(), tag = tostring(tag or "manual"), prefs = cfgSnapshot()}) end)
+        if not okJ then if EX.Log then EX.Log("error", "versions", "encode failed") end; return false end
+        if hasFS then
+            local ok = pcall(function() if not isfolder("Eclypse") then makefolder("Eclypse") end; if not isfolder(CFG_DIR) then makefolder(CFG_DIR) end; if not isfolder(EX.VER_DIR) then makefolder(EX.VER_DIR) end; writefile(EX.VER_DIR .. "/" .. name .. ".json", json) end)
+            if not ok then if EX.Log then EX.Log("error", "versions", "write failed") end; return false end
+        else EX.VerMem[name] = json end
+        local list = EX.verList()
+        for i = EX.VER_KEEP + 1, #list do if hasFS then pcall(function() delfile(EX.VER_DIR .. "/" .. list[i] .. ".json") end) else EX.VerMem[list[i]] = nil end end
+        EX.verRefresh(); if EX.Log then EX.Log("info", "versions", "saved " .. name .. " (" .. tostring(tag) .. ")") end
+        return true
+    end
+    function EX.verRead(name)
+        local json
+        if hasFS then local ok, res = pcall(readfile, EX.VER_DIR .. "/" .. name .. ".json"); if ok then json = res end else json = EX.VerMem[name] end
+        if type(json) ~= "string" then return nil, "version not found" end
+        local ok, tbl = pcall(function() return HttpService:JSONDecode(json) end)
+        if not ok or type(tbl) ~= "table" then return nil, "invalid version file" end
+        return (type(tbl.prefs) == "table") and tbl.prefs or tbl, nil, tbl
+    end
+    function EX.verRestore()
+        local name = cfgClean(get("cfg_ver", "")); if name == "" then notify("Versions", "pick a version first"); return end
+        local prefs, err = EX.verRead(name); if not prefs then notify("Versions", tostring(err)); return end
+        EX.verSave("before-restore")
+        notify("Versions", "restored " .. name .. " (" .. tostring(cfgApply(prefs)) .. " options)")
+    end
+    function EX.verDiff()
+        local name = cfgClean(get("cfg_ver", "")); if name == "" then notify("Versions", "pick a version first"); return end
+        local prefs, err = EX.verRead(name); if not prefs then notify("Versions", tostring(err)); return end
+        local cur, lines = cfgSnapshot(), {"[Eclypse version diff] " .. name .. " -> current"}
+        local function s(v) if type(v) == "table" then return tostring(v.Key) .. "/" .. tostring(v.Mode) end; return tostring(v) end
+        local keys = {}; for k in pairs(cur) do keys[k] = true end; for k in pairs(prefs) do keys[k] = true end
+        local list = {}; for k in pairs(keys) do list[#list + 1] = k end; table.sort(list)
+        for _, k in ipairs(list) do if s(prefs[k]) ~= s(cur[k]) and #lines < 60 then lines[#lines + 1] = string.format("  %s: version=%s current=%s", k, s(prefs[k]), s(cur[k])) end end
+        if #lines == 1 then lines[2] = "  no differences" end
+        EX.emit(table.concat(lines, "\n"), "Version diff")
+    end
+    EX.STATE_FILE, EX.FLAG_FILE = "Eclypse/state.json", "Eclypse/running.flag"
+    function EX.stateSave(force)
+        if not get("rec_on", true) and not force then return end
+        local ok, json = pcall(function()
+            local p = Main.Position
+            return HttpService:JSONEncode({schema = 1, saved = os.time(), prefs = cfgSnapshot(), page = EX.curPage, pos = {p.X.Scale, p.X.Offset, p.Y.Scale, p.Y.Offset}})
+        end)
+        if not ok then return end
+        if json == EX.stateLast and not force then return end
+        EX.stateLast = json; shared.EclypseState = json
+        if hasFS then pcall(function() if not isfolder("Eclypse") then makefolder("Eclypse") end; writefile(EX.STATE_FILE, json) end) end
+    end
+    function EX.stateRestore()
+        local json = shared.EclypseState
+        if hasFS then local ok, s = pcall(function() if isfile and isfile(EX.STATE_FILE) then return readfile(EX.STATE_FILE) end end); if ok and type(s) == "string" and s ~= "" then json = s end end
+        if type(json) ~= "string" then return false, "no saved state" end
+        local ok, tbl = pcall(function() return HttpService:JSONDecode(json) end)
+        if not ok or type(tbl) ~= "table" or type(tbl.prefs) ~= "table" then return false, "invalid state file" end
+        local n = cfgApply(tbl.prefs)
+        if type(tbl.pos) == "table" then
+            local sx, ox, sy, oy = tonumber(tbl.pos[1]), tonumber(tbl.pos[2]), tonumber(tbl.pos[3]), tonumber(tbl.pos[4])
+            local v = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+            if sx and ox and sy and oy and ox == ox and oy == oy and math.abs(ox) < v.X * 2 and math.abs(oy) < v.Y * 2 then Main.Position = UDim2.new(sx, ox, sy, oy) end
+        end
+        if type(tbl.page) == "string" and Pages[tbl.page] then SwitchPage(tbl.page) end
+        return true, n
+    end
+    -- bandeira de saida limpa: "running" durante a sessao, "clean" no unload; sem delfile
+    function EX.stateFlag(set)
+        if not hasFS then return false end
+        if set == nil then
+            local ok, r = pcall(function() if isfile and isfile(EX.FLAG_FILE) then return readfile(EX.FLAG_FILE) end end)
+            return ok and r == "running"
+        end
+        pcall(function() if not isfolder("Eclypse") then makefolder("Eclypse") end; writefile(EX.FLAG_FILE, set and "running" or "clean") end)
+    end
     EX.cfgRefresh()
 
     -- ---------- botao flutuante do menu ----------
@@ -2037,30 +2875,49 @@ do
     local function botSource()
         if get("bot_avatar", "My Avatar") == "Random Player" then
             local c = {}
-            for _, p in ipairs(Players:GetPlayers()) do if p ~= LP and p.Character and p.Character:FindFirstChildOfClass("Humanoid") then c[#c + 1] = p.Character end end
-            if #c > 0 then return c[math.random(#c)] end
+            for _, p in ipairs(Players:GetPlayers()) do if p ~= LP and p.Character then c[#c + 1] = p end end
+            if #c > 0 then local p = c[math.random(#c)]; return p.Character, p.UserId end
         end
-        return LP.Character
+        return LP.Character, LP.UserId
     end
+    Bots.busy = false
+    local function validBot(m) return m ~= nil and m:FindFirstChildOfClass("Humanoid") ~= nil and m:FindFirstChild("HumanoidRootPart") ~= nil end
     function EX.botSpawn()
-        local me = LP.Character; local hrp = me and me:FindFirstChild("HumanoidRootPart")
+        if Bots.busy then notify("Bots", "spawn in progress"); return end
+        local me = LP.Character; local hrp = me and (me:FindFirstChild("HumanoidRootPart") or me.PrimaryPart)
         if not hrp then notify("Bots", "no character yet"); return end
         local n = math.clamp(getNum("bot_count", 3), 1, 10)
         if #Bots.list + n > 25 then n = 25 - #Bots.list end
         if n <= 0 then notify("Bots", "limit of 25 reached"); return end
-        local spawned = 0
-        for i = 1, n do
-            local src = botSource()
-            if src then
-                local was = src.Archivable; src.Archivable = true
-                local ok, clone = pcall(function() return src:Clone() end)
-                src.Archivable = was
-                if ok and clone then
-                    for _, d in ipairs(clone:GetDescendants()) do
-                        if d:IsA("LuaSourceContainer") then d:Destroy() elseif d:IsA("BasePart") then d.CanCollide = false end
+        Bots.busy = true
+        task.spawn(function()
+            local why, spawned, viaFallback, templates = {cloneFailed = 0, noHumanoid = 0, fallbackFailed = 0}, 0, 0, {}
+            local okRun, errRun = pcall(function()
+                for i = 1, n do
+                    local src, uid = botSource()
+                    local clone
+                    if src then
+                        local was = src.Archivable; src.Archivable = true
+                        local ok, c = pcall(function() return src:Clone() end)
+                        src.Archivable = was
+                        if ok and c then clone = c else why.cloneFailed = why.cloneFailed + 1 end
                     end
-                    local hum = clone:FindFirstChildOfClass("Humanoid"); local chrp = clone:FindFirstChild("HumanoidRootPart")
-                    if hum and chrp then
+                    if clone and not validBot(clone) then why.noHumanoid = why.noHumanoid + 1; clone:Destroy(); clone = nil end
+                    if not clone then
+                        local tpl = templates[uid]
+                        if not tpl then
+                            local ok, m = pcall(function() return Players:CreateHumanoidModelFromUserId(uid) end)
+                            if ok and m then templates[uid] = m; tpl = m end
+                        end
+                        local ok2, c2 = false, nil
+                        if tpl then ok2, c2 = pcall(function() return tpl:Clone() end) end
+                        if ok2 and validBot(c2) then clone = c2; viaFallback = viaFallback + 1 else why.fallbackFailed = why.fallbackFailed + 1 end
+                    end
+                    if clone then
+                        for _, d in ipairs(clone:GetDescendants()) do
+                            if d:IsA("LuaSourceContainer") then d:Destroy() elseif d:IsA("BasePart") then d.CanCollide = false end
+                        end
+                        local hum = clone:FindFirstChildOfClass("Humanoid"); local chrp = clone:FindFirstChild("HumanoidRootPart")
                         local idx = #Bots.list + 1
                         clone.Name = "EclypseBot" .. idx; hum.DisplayName = "Bot " .. idx; hum.WalkSpeed = getNum("bot_speed", 16)
                         clone.Parent = Workspace
@@ -2076,11 +2933,15 @@ do
                         if tracks.idle then tracks.idle.Looped = true; tracks.idle:Play() end
                         Bots.list[idx] = {model = clone, hum = hum, hrp = chrp, tracks = tracks, moving = false}
                         spawned = spawned + 1
-                    else clone:Destroy() end
+                    end
                 end
-            end
-        end
-        notify("Bots", "Spawned " .. spawned .. " bots")
+            end)
+            for _, m in pairs(templates) do pcall(function() m:Destroy() end) end
+            Bots.busy = false
+            if not okRun then warn("[Eclypse] Bots: " .. tostring(errRun)) end
+            notify("Bots", "Spawned " .. spawned .. "/" .. n .. (viaFallback > 0 and (" (" .. viaFallback .. " via avatar fallback)") or ""))
+            if spawned < n then warn(string.format("[Eclypse] Bots: %d/%d | clone failed: %d | clone without Humanoid/HumanoidRootPart: %d | avatar fallback failed: %d", spawned, n, why.cloneFailed, why.noHumanoid, why.fallbackFailed)) end
+        end)
     end
     function EX.botBring()
         local me = LP.Character; local hrp = me and me:FindFirstChild("HumanoidRootPart"); if not hrp then return end
@@ -2208,92 +3069,43 @@ local gPoll, gTrack, gCircles, gAim, gSilent, gRage, gKill, gTrig, gESP = guard(
 local gHB = guard("heartbeat", onHeartbeat)
 local gNPC = guard("npc", initNPCs)
 local rapidLast, bulletLast = 0, 0
-local function rapidGap() if get("wpn_cd", false) then return math.max(getNum("wpn_cdval", 500), 10) / 1000 end; return 0.04 end
-local gRapid = guard("rapid", function() if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then return end; if UserInputService:GetFocusedTextBox() or GUI.Enabled then return end; local now = os.clock(); if get("wpn_rapid") and now - rapidLast > rapidGap() then rapidLast = now; clickFire() end; if get("trc_on") and now - bulletLast > 0.1 then bulletLast = now; spawnBulletTracer() end end)
+local gRapid = guard("rapid", function() if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then return end; if UserInputService:GetFocusedTextBox() or GUI.Enabled then return end; local now = os.clock(); if get("wpn_rapid") and now - rapidLast > 0.04 then rapidLast = now; clickFire() end; if get("trc_on") and now - bulletLast > 0.1 then bulletLast = now; spawnBulletTracer() end end)
 
 -- Mira só roda em partida: menu fechado, sem caixa de texto, personagem vivo e mouse travado no centro (cursor livre = lobby/menu do jogo)
--- V35: antes a mira so era liberada com Humanoid vivo E (mouse travado OU camera a < 2 studs da cabeca). Em jogos com cursor proprio, viewmodel
--- ou personagem sem Humanoid isso bloqueava aimbot/silent/trigger/rage por completo. Agora: menu fechado + sem caixa de texto + personagem vivo.
--- O gate antigo continua disponivel com GameConfig.MatchGate = "strict".
-EX.AimGate = {why = "ok"}
 local function aimAllowed()
-    local G = EX.AimGate
-    if GUI.Enabled or Confirm.Visible then G.why = "menu aberto"; return false end
-    if UserInputService:GetFocusedTextBox() then G.why = "caixa de texto"; return false end
-    local c = LP.Character
-    if not c then G.why = "sem personagem"; return false end
-    local h = c:FindFirstChildOfClass("Humanoid")
-    if h and h.Health <= 0 then G.why = "morto"; return false end
-    if GameConfig.MatchGate == "strict" then
-        if not h then G.why = "strict: sem Humanoid"; return false end
-        if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
-            local cam, head = Workspace.CurrentCamera, c:FindFirstChild("Head")
-            if not (cam ~= nil and head ~= nil and (cam.CFrame.Position - head.Position).Magnitude < 2) then G.why = "strict: mouse livre e camera longe da cabeca"; return false end
-        end
-    end
-    G.why = "ok"; return true
+    if GUI.Enabled or Confirm.Visible then return false end
+    if UserInputService:GetFocusedTextBox() then return false end
+    local c = LP.Character; local h = c and c:FindFirstChildOfClass("Humanoid")
+    if not h or h.Health <= 0 then return false end
+    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then return true end
+    local cam, head = Workspace.CurrentCamera, c:FindFirstChild("Head")
+    return cam ~= nil and head ~= nil and (cam.CFrame.Position - head.Position).Magnitude < 2
 end
--- Diagnostico (GameConfig.Debug): a cada 3 s mostra por que aimbot/trigger/silent nao acham alvo.
-EX.dbgLast = 0
-EX.debugTick = function(cam, dt)
-    if not GameConfig.Debug then return end
-    local now = os.clock(); if now - EX.dbgLast < 3 then return end; EX.dbgLast = now
-    local others, withChar, withHum, withRoot = 0, 0, 0, 0
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LP then
-            others = others + 1
-            local c = EX.charOf(plr)
-            if c then withChar = withChar + 1; if c:FindFirstChildOfClass("Humanoid") then withHum = withHum + 1 end; if EX.rootOf(c) then withRoot = withRoot + 1 end end
-        end
-    end
-    local list = entities(); local enemies = 0
-    for _, e in ipairs(list) do if e.enemy then enemies = enemies + 1 end end
-    print(string.format("[Eclypse debug] outros=%d comPersonagem=%d comHumanoid=%d comRaiz=%d | entidades=%d inimigos=%d | meuChar=%s", others, withChar, withHum, withRoot, #list, enemies, tostring(LP.Character ~= nil)))
-    print(string.format("[Eclypse debug] mira liberada=%s (%s) | aim on=%s bind=%s | silent on=%s bind=%s hook=%s | trigger on=%s bind=%s | rage on=%s bind=%s | pausado=%s",
-        tostring(aimAllowed()), EX.AimGate.why, tostring(get("aim_on")), tostring(bindActive("aim_key")), tostring(get("sil_on")), tostring(bindActive("sil_key")), tostring(Silent.hooked),
-        tostring(get("trg_on")), tostring(bindActive("trg_key")), tostring(get("rage_on")), tostring(bindActive("rage_key")), tostring(HB.paused)))
-    print(string.format("[Eclypse debug] mousemoverel=%s mouse1click=%s getgc=%s require=%s | MouseBehavior=%s | aim usa camera=%s",
-        tostring(type(Cap.mousemoverel) == "function"), tostring(type(Cap.mouse1click) == "function"), tostring(type(getgc) == "function"), tostring(type(Cap.require) == "function"),
-        tostring(UserInputService.MouseBehavior), tostring(EX.AimCtl.forceCam)))
-    local best, bd
-    for _, e in ipairs(list) do local d = (e.hrp.Position - cam.CFrame.Position).Magnitude; if not bd or d < bd then best, bd = e, d end end
-    if best then
-        local v, on = cam:WorldToViewportPoint(best.hrp.Position); local vs = cam.ViewportSize
-        local px = (Vector2.new(v.X, v.Y) - Vector2.new(vs.X / 2, vs.Y / 2)).Magnitude
-        print(string.format("[Eclypse debug] mais perto: %s | studs=%.0f naTela=%s distCentro=%.0fpx | linhaLivre=%s | inimigo=%s npc=%s", best.name, bd, tostring(on), px,
-            tostring(lineClear(cam, best.hrp.Position, best.char)), tostring(best.enemy), tostring(best.npc == true)))
-    else print("[Eclypse debug] nenhuma entidade valida (nenhum outro jogador com personagem/raiz e vida > 0)") end
-end
-EX.gDbg = guard("debug", EX.debugTick)
 pcall(function() RunService:UnbindFromRenderStep("DrxMain") end)
-RunService:BindToRenderStep("DrxMain", Enum.RenderPriority.Camera.Value + 1, function(dt) FrameNo = FrameNo + 1; fpsAvg = fpsAvg + (1 / math.max(dt, 1e-4) - fpsAvg) * 0.05; gPoll(); local cam = Workspace.CurrentCamera; if not cam then return end; if get("aim_on") or get("sil_on") or get("rage_on") or get("trg_on") then gNPC() end; if get("aim_on") or get("sil_on") or get("rage_on") or get("trg_on") or get("ra_kill") or get("esp_path") then gTrack() end; gCircles(cam); if HB.paused or not aimAllowed() then Silent.target = nil; Silent.shooting = false else gAim(cam, dt); gSilent(cam, dt); gRage(cam, dt); gKill(cam, dt); gTrig(cam, dt) end; gESP(cam, dt); gRapid(); EX.gDbg(cam, dt); if os.clock() - EX.profT > 15 then EX.profReport() end end)
+RunService:BindToRenderStep("DrxMain", Enum.RenderPriority.Camera.Value + 1, function(dt) FrameNo = FrameNo + 1; fpsAvg = fpsAvg + (1 / math.max(dt, 1e-4) - fpsAvg) * 0.05; gPoll(); local cam = Workspace.CurrentCamera; if not cam then return end; if get("aim_on") or get("sil_on") or get("rage_on") or get("trg_on") then gNPC() end; if get("aim_on") or get("sil_on") or get("rage_on") or get("trg_on") or get("ra_kill") or get("esp_path") then gTrack() end; gCircles(cam); if HB.paused or not aimAllowed() then Silent.target = nil; Silent.shooting = false else gAim(cam, dt); gSilent(cam, dt); gRage(cam, dt); gKill(cam, dt); gTrig(cam, dt) end; gESP(cam, dt); gRapid(); if os.clock() - EX.profT > 15 then EX.profReport() end end)
 Conns[#Conns + 1] = RunService.Heartbeat:Connect(function(dt) gHB(dt) end)
--- Sem simulacao de entrada AFK via VirtualUser; o Roblox controla a inatividade normalmente.
+Conns[#Conns + 1] = LP.Idled:Connect(function() if get("misc_afk") then pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton2(Vector2.new()) end) end end)
 
 local dragging, dragStart, startPos = false, nil, nil
 local function menuMatch(input, mk) return (input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == mk.Key) or (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB") or (input.UserInputType == Enum.UserInputType.MouseButton3 and mk.Key == "MMB") end
 Conns[#Conns + 1] = UserInputService.InputBegan:Connect(function(input, processed) if input.UserInputType == Enum.UserInputType.MouseButton1 and (not processed) and get("trc_on") and not GUI.Enabled then bulletLast = os.clock(); pcall(spawnBulletTracer) end; if processed then return end; local mk = get("misc_menukey", {Key = "RightShift", Mode = "Toggle"}); local match = menuMatch(input, mk); if mk.Mode == "Toggle" and match then GUI.Enabled = not GUI.Enabled elseif mk.Mode == "Hold" and match then GUI.Enabled = true end end)
 Conns[#Conns + 1] = UserInputService.InputEnded:Connect(function(input) local mk = get("misc_menukey", {Key = "RightShift", Mode = "Toggle"}); if mk.Mode == "Hold" and menuMatch(input, mk) then GUI.Enabled = false end; if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false; activeSlider = nil end end)
 TopBar.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true; dragStart = input.Position; startPos = Main.Position end end)
-Conns[#Conns + 1] = UserInputService.InputChanged:Connect(function(input) if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then local d = input.Position - dragStart; Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y) end; if activeSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then if activeSlider.track and activeSlider.track.Parent then local pct = math.clamp((input.Position.X - activeSlider.track.AbsolutePosition.X) / math.max(activeSlider.track.AbsoluteSize.X, 1), 0, 1); activeSlider.update(pct) else activeSlider = nil end end end)
+Conns[#Conns + 1] = UserInputService.InputChanged:Connect(function(input) if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then local d = input.Position - dragStart; Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X / (EX.uiScaleValue or 1), startPos.Y.Scale, startPos.Y.Offset + d.Y / (EX.uiScaleValue or 1)) end; if activeSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then if activeSlider.track and activeSlider.track.Parent then local pct = math.clamp((input.Position.X - activeSlider.track.AbsolutePosition.X) / math.max(activeSlider.track.AbsoluteSize.X, 1), 0, 1); activeSlider.update(pct) else activeSlider = nil end end end)
 
 EX.step(88, "Finalizing...")
 local cleaned = false
 local function cleanup()
-    if cleaned then return end; cleaned = true; if shared.DrxCleanup == cleanup then shared.DrxCleanup = nil end; Booted = false; if EX.destroyLoading then pcall(EX.destroyLoading) end; Silent.alive = false; Silent.target = nil; MouseDeltaHook.alive = false; pcall(function() RunService:UnbindFromRenderStep("DrxMain") end); for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end; UiMouse.setOpen(false); UiMouse.alive = false; stopFly(); noclipRestoreAll(); restoreWeapon(); pcall(EX.featureCleanup); for k, e in pairs(ESP) do destroyESP(e); ESP[k] = nil end; if HB.tp then pcall(function() LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end) end; Overlay:Destroy(); if GUI.Parent then GUI:Destroy() end
+    if cleaned then return end; cleaned = true; if shared.DrxCleanup == cleanup then shared.DrxCleanup = nil end; Booted = false; if EX.destroyLoading then pcall(EX.destroyLoading) end; Silent.alive = false; Silent.target = nil; MouseDeltaHook.alive = false; pcall(function() RunService:UnbindFromRenderStep("DrxMain") end); for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end; UiMouse.setOpen(false); UiMouse.alive = false; stopFly(); pcall(EX.devCleanup); pcall(EX.noclipRestore); restoreWeapon(); pcall(EX.featureCleanup); for k, e in pairs(ESP) do destroyESP(e); ESP[k] = nil end; if HB.tp then pcall(function() LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end) end; Overlay:Destroy(); if GUI.Parent then GUI:Destroy() end
 end
 shared.DrxCleanup = cleanup
 doUnload = cleanup
 GUI.Destroying:Connect(cleanup)
 UiMouse.setOpen(GUI.Enabled)
 Booted = true
-do
-    local missing = {}
-    for _, n in ipairs({"mousemoverel", "mouse1click", "hookmetamethod", "newcclosure", "checkcaller", "getnamecallmethod", "require", "getloadedmodules"}) do if type(Cap[n]) ~= "function" then missing[#missing + 1] = n end end
-    if type(getgc) ~= "function" then missing[#missing + 1] = "getgc" end
-    print("[Eclypse V35] ausentes no executor: " .. ((#missing > 0) and table.concat(missing, ", ") or "nenhum"))
-end
-print("[Eclypse V30] pronto | silent-hook=" .. (SilentHooks.done and tostring(Silent.hooked) or "instala ao ligar o Silent") .. " | Build=" .. GameConfig.Build)
+print("[Eclypse V31] pronto | silent-hook=" .. (SilentHooks.done and tostring(Silent.hooked) or "instala ao ligar o Silent") .. " | Build=" .. GameConfig.Build)
+pcall(EX.bootV31)
+pcall(EX.bootDev)
 do
     local L = EX.Load
     L.target = 100; L.text = "Ready"
