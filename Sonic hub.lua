@@ -18,7 +18,7 @@ for _, n in ipairs({"DrxHub", "DrxOverlay", "DrxMouseModal", "EclypseLoading"}) 
     local b = game:GetService("CoreGui"):FindFirstChild(n); if b then b:Destroy() end
 end
 
-local Prefs, Labels, BindNames, Conns, Warned = {}, {}, {}, {}, {}
+local Prefs, Labels, BindNames, Conns, Warned = {}, {}, {}, {}, {}\nPrefs.esp_tracers = false -- desativado: evita linhas do centro da tela até cada entidade
 local Booted, notify = false, nil
 local EX = {perfLast = {}, prof = {}, profT = os.clock()}
 local function set(k, v)
@@ -748,7 +748,7 @@ AddPage("Configurações", function(c1, c2)
     EX.Btn(gCom, "Close Menu", nil, function() GUI.Enabled = false end)
     EX.Btn(gCom, "Unload Eclypse", nil, function() Confirm.Visible = true end)
     local gMenu = CreateGroup(c2, "Menu & Desempenho")
-    CreateToggle(gMenu, "Click Sounds", "set_clicksnd", false); CreateSlider(gMenu, "ESP Rate (FPS)", "set_espfps", 15, 144, 60)
+    CreateToggle(gMenu, "Click Sounds", "set_clicksnd", false); CreateSlider(gMenu, "ESP Rate (FPS)", "set_espfps", 15, 144, 30)
 end)
 AddPage("Hitbox", function(c1, c2)
     local g1 = CreateGroup(c1, "Hitbox Expander")
@@ -941,20 +941,29 @@ function EX.pickTargetCached(key, o)
 end
 local function stepAlpha(a60, dt) return 1 - (1 - math.clamp(a60, 0, 1)) ^ (math.clamp(dt, 0, 0.1) * 60) end
 local function aimStep(target, alpha)
-    local cam = Workspace.CurrentCamera; if not cam then return end
-    local v, on = cam:WorldToViewportPoint(target.pos); local vs = cam.ViewportSize
-    if on and type(Cap.mousemoverel) == "function" then
-        local dx, dy = (v.X - vs.X / 2) * alpha, (v.Y - vs.Y / 2) * alpha; local mag = math.sqrt(dx * dx + dy * dy); if mag > 80 then dx, dy = dx / mag * 80, dy / mag * 80 end
-        if pcall(Cap.mousemoverel, dx, dy) then return end
+    -- Nunca escreve em CurrentCamera.CFrame: isso concorria com o CameraModule
+    -- do Roblox e causava tremor, snap e perda do controle normal da câmera.
+    local cam = Workspace.CurrentCamera
+    if not cam or not target or typeof(target.pos) ~= "Vector3" then return false end
+    local v, on = cam:WorldToViewportPoint(target.pos)
+    if not on or v.Z <= 0 then return false end
+    local vs = cam.ViewportSize
+    local dx = (v.X - vs.X / 2) * alpha
+    local dy = (v.Y - vs.Y / 2) * alpha
+    local mag = math.sqrt(dx * dx + dy * dy)
+    if mag > 60 then dx, dy = dx / mag * 60, dy / mag * 60 end
+    if type(Cap.mousemoverel) == "function" then
+        local ok = pcall(Cap.mousemoverel, dx, dy)
+        if ok then return true end
     end
-    local a = alpha
-    if on and not MouseDeltaHook.installed and ensureIndexHook then ensureIndexHook() end
-    if on and MouseDeltaHook.installed then
-        local p = MouseDeltaHook.pending + Vector2.new((v.X - vs.X / 2) * alpha * 0.5, (v.Y - vs.Y / 2) * alpha * 0.5)
-        if p.Magnitude > 150 then p = p.Unit * 150 end
-        MouseDeltaHook.pending = p; a = alpha * 0.5
+    if not MouseDeltaHook.installed and ensureIndexHook then pcall(ensureIndexHook) end
+    if MouseDeltaHook.installed then
+        local pending = MouseDeltaHook.pending + Vector2.new(dx * 0.5, dy * 0.5)
+        if pending.Magnitude > 100 then pending = pending.Unit * 100 end
+        MouseDeltaHook.pending = pending
+        return true
     end
-    cam.CFrame = cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position, target.pos), a)
+    return false
 end
 
 local Aim = {char = nil, since = 0}
@@ -1081,7 +1090,7 @@ local function runKillAll(cam, dt)
     for _, e in ipairs(entities()) do if e.enemy then local d = (e.hrp.Position - (myhrp and myhrp.Position or cam.CFrame.Position)).Magnitude; if not bd or d < bd then best, bd = e, d end end end
     if not best then return end; local head = best.char:FindFirstChild("Head") or best.hrp
     if not get("ra_kill_gun", true) and myhrp then myhrp.CFrame = CFrame.lookAt(best.hrp.Position - best.hrp.CFrame.LookVector * 3, best.hrp.Position) end
-    cam.CFrame = CFrame.new(cam.CFrame.Position, head.Position)
+    aimStep({pos = head.Position}, stepAlpha(0.5, dt))
     if os.clock() - Kill.last > 0.05 then Kill.last = os.clock(); if get("ra_kill_gun", true) then clickFire() else activateTool(); clickFire() end end
 end
 
@@ -1278,7 +1287,7 @@ local function weaponScanJob(tool, char)
     for _, rule in ipairs(WEAPON_RULES) do
         if get(rule.pref, false) and AutoW.scans >= 2 and not AutoW.found[rule.pref] and not AutoW.warned[rule.pref] then
             AutoW.warned[rule.pref] = true; warn("[Eclypse] " .. rule.label .. ": nenhum campo correspondente achado (arma equipada: " .. (tool and tool.Name or "nenhuma/Tool") .. ")")
-            notify(rule.label, "nada encontrado - veja o console")
+            warn("[Eclypse] " .. rule.label .. ": mapeamento específico da arma não configurado")
             if not AutoW.dumped then AutoW.dumped = true; dumpWeaponCandidates(tool) end
         end
     end
@@ -1300,16 +1309,9 @@ local function weaponPatchTick()
             end
         end
     end
-    -- 2) descoberta automática por nome de campo (em thread separada: nunca varre no frame do Heartbeat)
-    local anyOn = false; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then anyOn = true end end
-    if anyOn and not AutoW.busy and os.clock() - AutoW.last > 12 then
-        AutoW.busy = true
-        task.spawn(function()
-            local okc, errc = pcall(weaponScanJob, tool, char)
-            AutoW.last = os.clock(); AutoW.busy = false
-            if not okc and not AutoW.warned.job then AutoW.warned.job = true; warn("[Eclypse] varredura de armas: " .. tostring(errc)) end
-        end)
-    end
+    -- 2) A descoberta heurística foi desativada: percorrer módulos genéricos
+    -- e alterar campos só pelo nome causava stutter e falsos positivos.
+    -- Mods automáticos exigem GameConfig.Weapon específico do jogo/build.
     for i = #AutoW.list, 1, -1 do
         local e = AutoW.list[i]; local on = get(e.rule.pref, false)
         local ok = pcall(function() local want = on and e.rule.value(e.orig) or e.orig; if readRef(e) ~= want then writeRef(e, want) end end)
@@ -1379,13 +1381,13 @@ local function drawEntity(ent, e, cam, dt, now, dist, color, lite, maxD, vs, hlO
     local headPart = ent.char:FindFirstChild("Head")
     if get("esp_head") and headPart then local v, on = cam:WorldToViewportPoint(headPart.Position); e.HeadDot.Visible = on; if on then e.HeadDot.Position = UDim2.fromOffset(v.X, v.Y); e.HeadDot.BackgroundColor3 = color; e.HeadDot.BackgroundTransparency = tr(0) end else e.HeadDot.Visible = false end
     if get("esp_skel") then local bones = ent.char:FindFirstChild("UpperTorso") and BONES15 or BONES6; for i, pair in ipairs(bones) do local a, b = ent.char:FindFirstChild(pair[1]), ent.char:FindFirstChild(pair[2]); local l = lineAt(e, e.Bones, i); if a and b then local va, oa = cam:WorldToViewportPoint(a.Position); local vb, ob = cam:WorldToViewportPoint(b.Position); if oa and ob then drawLine(l, Vector2.new(va.X, va.Y), Vector2.new(vb.X, vb.Y), 1, color, tr(0), 2) else l.Visible = false end else l.Visible = false end end; hideList(e.Bones, #bones + 1) else hideList(e.Bones) end
-    if get("esp_tracers") then local o = get("esp_torigin", "Bottom"); local origin; if o == "Center" then origin = Vector2.new(vs.X / 2, vs.Y / 2) elseif o == "Top" then origin = Vector2.new(vs.X / 2, 0) elseif o == "Mouse" then local m = UserInputService:GetMouseLocation(); origin = Vector2.new(m.X, m.Y) else origin = Vector2.new(vs.X / 2, vs.Y) end; drawLine(lineAt(e, e.Tr, 1), origin, Vector2.new(e.cx, y1), 1, color, tr(0.3), 1) else hideList(e.Tr) end
+    if get("esp_tracers", false) then local o = get("esp_torigin", "Bottom"); local origin; if o == "Center" then origin = Vector2.new(vs.X / 2, vs.Y / 2) elseif o == "Top" then origin = Vector2.new(vs.X / 2, 0) elseif o == "Mouse" then local m = UserInputService:GetMouseLocation(); origin = Vector2.new(m.X, m.Y) else origin = Vector2.new(vs.X / 2, vs.Y) end; drawLine(lineAt(e, e.Tr, 1), origin, Vector2.new(e.cx, y1), 1, color, tr(0.3), 1) else hideList(e.Tr) end
     if get("esp_path") then local vel = velocityOf(ent.char, 100); local fut = hrp.Position + vel * (getNum("esp_ptime", 50) / 10); local v, on = cam:WorldToViewportPoint(fut); if on then drawLine(lineAt(e, e.Pa, 1), Vector2.new(sp.X, sp.Y), Vector2.new(v.X, v.Y), 1, color, tr(0.2), 1) else hideList(e.Pa) end else hideList(e.Pa) end
 end
 
 EX.espAcc = 0
 local function renderESP(cam, dt)
-    EX.espAcc = EX.espAcc + dt; if EX.espAcc < 1 / math.max(getNum("set_espfps", 60), 10) then return end; dt = EX.espAcc; EX.espAcc = 0
+    EX.espAcc = EX.espAcc + dt; if EX.espAcc < 1 / math.max(getNum("set_espfps", 30), 10) then return end; dt = EX.espAcc; EX.espAcc = 0
     local any = get("esp_on", true) and (get("esp_box") or get("esp_name") or get("esp_skel") or get("esp_wpn") or get("esp_health") or get("esp_distance") or get("esp_head") or get("esp_tracers") or get("esp_path")); local anyHL = get("hl_on")
     if not any and not anyHL then for k, e in pairs(ESP) do destroyESP(e); ESP[k] = nil end; return end; if get("esp_npc") then initNPCs() end
     local now, vs = os.clock(), cam.ViewportSize; local maxD, lite = getNum("esp_dist", 1000), get("esp_render", "Full") == "Lite"; local seen = {}
@@ -1953,12 +1955,12 @@ Conns[#Conns + 1] = RunService.Heartbeat:Connect(function(dt)
     themeClock = themeClock + dt
     if themeClock < 0.12 then return end
     themeClock = 0
-    local style = get("set_theme_style", "Crimson")
-    local c = EX.themeColor(style, os.clock() * 1.15)
-    EX.setAnimatedAccent(c)
+    local pulse = 0.08 + (math.sin(os.clock() * 1.15) + 1) * 0.035
+    local c = Theme.accent:Lerp(Color3.new(1, 1, 1), pulse)
+    -- Animação tonal na paleta original: não troca o matiz do hub.
     if TopGradient and TopGradient.Parent then
-        TopGradient.Rotation = (os.clock() * 24) % 360
-        TopGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, c), ColorSequenceKeypoint.new(0.5, Theme.panel), ColorSequenceKeypoint.new(1, c:Lerp(Color3.new(1, 1, 1), 0.28))})
+        TopGradient.Rotation = (os.clock() * 18) % 360
+        TopGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, c), ColorSequenceKeypoint.new(0.5, Theme.panel), ColorSequenceKeypoint.new(1, Theme.accent)})
     end
     if MainStroke and MainStroke.Parent then MainStroke.Thickness = 1.7 + (math.sin(os.clock() * 3) + 1) * 0.65; MainStroke.Transparency = 0.08 + (math.sin(os.clock() * 2) + 1) * 0.12 end
 end)
