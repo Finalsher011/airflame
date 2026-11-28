@@ -92,6 +92,13 @@ EX.prefHook = function(k)
         EX.bgPending = true
         task.delay(0.05, function() EX.bgPending = false; pcall(EX.applyBackground) end)
     end
+    if k == "set_visual_theme" and not EX.themePending then
+        EX.themePending = true
+        task.delay(0.06, function()
+            EX.themePending = false
+            pcall(EX.applyVisualTheme, get("set_visual_theme", "Halloween"))
+        end)
+    end
 end
 function EX.timed(name, fn, ...)
     local t0 = os.clock(); fn(...)
@@ -390,7 +397,7 @@ corner(Main, 12); outline(Main, 2, Theme.accent)
 local TopBar = new("Frame", {Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 = Theme.panel}, Main)
 corner(TopBar, 12)
 new("Frame", {Size = UDim2.new(1, 0, 0, 15), Position = UDim2.new(0, 0, 1, -15), BackgroundColor3 = Theme.panel}, TopBar)
-new("Frame", {Name = "TopAccentLine", Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = Theme.accent}, TopBar)
+new("Frame", {Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = Theme.accent}, TopBar)
 EX.makeLogo(TopBar, 44, {Position = UDim2.fromOffset(12, 3), cut = Theme.panel, ZIndex = 2})
 label(TopBar, {Size = UDim2.fromOffset(200, 50), Position = UDim2.fromOffset(96, 0), Text = "ENTERPRISE  V30", Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Theme.sub})
 local closeBtn = new("TextButton", {Size = UDim2.fromOffset(30, 30), Position = UDim2.new(1, -45, 0.5, -15), BackgroundTransparency = 1, Text = "x", Font = Enum.Font.GothamBold, TextSize = 18, TextColor3 = Theme.sub}, TopBar)
@@ -681,7 +688,7 @@ AddPage("Legit", function(c1, c2)
 end)
 AddPage("Misc", function(c1, c2)
     local g1 = CreateGroup(c1, "Misc"); CreateToggle(g1, "Spectator list", "misc_spect", false); CreateToggle(g1, "Anti Spectate", "misc_antispect", false); CreateToggle(g1, "Anti AFK", "misc_afk", true); CreateToggle(g1, "Bhop", "misc_bhop", false); CreateSlider(g1, "Speed Per Jump", "bh_inc", 0, 10, 2); CreateSlider(g1, "Max Speed", "bh_max", 16, 100, 32); CreateToggle(g1, "No Jump Fatigue", "bh_fatigue", true)
-    local g3 = CreateGroup(c1, "Movement"); CreateToggle(g3, "Speed", "mv_speed", false); CreateKeybind(g3, "Speed Key", "mv_speed_key", "Always", "Always"); CreateSlider(g3, "Extra Speed", "mv_extra", 0, 50, 6); CreateToggle(g3, "Fly", "mv_fly", false); CreateKeybind(g3, "Fly Key", "mv_fly_key", "Always", "Always"); CreateSlider(g3, "Fly Speed", "mv_flyspeed", 10, 200, 60); CreateToggle(g3, "Noclip", "mv_noclip", false)
+    local g3 = CreateGroup(c1, "Movement"); CreateToggle(g3, "Speed", "mv_speed", false); CreateKeybind(g3, "Speed Key", "mv_speed_key", "Always", "Always"); CreateSlider(g3, "Extra Speed", "mv_extra", 0, 50, 6); CreateToggle(g3, "Fly", "mv_fly", false); CreateKeybind(g3, "Fly Key", "mv_fly_key", "Always", "Always"); CreateSlider(g3, "Fly Speed", "mv_flyspeed", 10, 200, 60)
     local g2 = CreateGroup(c2, "Camera"); CreateToggle(g2, "Third Person", "cam_third", false); CreateKeybind(g2, "Third Person Key", "cam_key", "V", "Toggle"); CreateSlider(g2, "ThirdPerson Distance", "cam_dist", 5, 50, 12)
 end)
 AddPage("Inventory Changer", function(c1, c2) local g1 = CreateGroup(c1, "Skins"); label(g1, {Size = UDim2.new(1, 0, 0, 20), Text = "Em breve...", TextSize = 14, TextColor3 = Theme.sub}) end)
@@ -694,13 +701,123 @@ AddPage("Visuals", function(c1, c2)
     local g3 = CreateGroup(c2, "Tracers"); CreateToggle(g3, "Enable Tracers", "trc_on", false); CreateSlider(g3, "Tracer Width", "trc_width", 1, 10, 2); CreateSlider(g3, "Tracer Lifetime", "trc_life", 1, 10, 5)
 end)
 AddPage("World", function(c1, c2) local g1 = CreateGroup(c1, "Ambiente"); label(g1, {Size = UDim2.new(1, 0, 0, 20), Text = "Em breve...", TextSize = 14, TextColor3 = Theme.sub}) end)
+
+-- ===== ECLYPSE THEME ENGINE: temas completos + efeitos animados =====
+EX.ThemePresets = {
+    Halloween = {bg=Color3.fromRGB(8,5,12), panel=Color3.fromRGB(18,10,24), card=Color3.fromRGB(29,16,35), track=Color3.fromRGB(48,27,54), stroke=Color3.fromRGB(83,43,74), accent=Color3.fromRGB(255,112,24), secondary=Color3.fromRGB(171,55,255)},
+    Midnight = {bg=Color3.fromRGB(5,8,18), panel=Color3.fromRGB(10,16,32), card=Color3.fromRGB(17,27,48), track=Color3.fromRGB(29,43,69), stroke=Color3.fromRGB(48,67,101), accent=Color3.fromRGB(91,125,255), secondary=Color3.fromRGB(46,220,255)},
+    Cyberpunk = {bg=Color3.fromRGB(8,5,18), panel=Color3.fromRGB(19,9,35), card=Color3.fromRGB(31,14,48), track=Color3.fromRGB(53,22,72), stroke=Color3.fromRGB(91,35,105), accent=Color3.fromRGB(255,45,190), secondary=Color3.fromRGB(30,245,255)},
+    Ocean = {bg=Color3.fromRGB(3,12,18), panel=Color3.fromRGB(6,24,34), card=Color3.fromRGB(10,39,52), track=Color3.fromRGB(18,58,73), stroke=Color3.fromRGB(30,83,98), accent=Color3.fromRGB(30,205,220), secondary=Color3.fromRGB(66,130,255)},
+    Sakura = {bg=Color3.fromRGB(18,8,16), panel=Color3.fromRGB(32,14,27), card=Color3.fromRGB(48,21,39), track=Color3.fromRGB(72,34,57), stroke=Color3.fromRGB(105,52,79), accent=Color3.fromRGB(255,112,177), secondary=Color3.fromRGB(255,205,225)},
+    Emerald = {bg=Color3.fromRGB(4,13,10), panel=Color3.fromRGB(8,25,18), card=Color3.fromRGB(14,39,27), track=Color3.fromRGB(24,58,39), stroke=Color3.fromRGB(40,86,57), accent=Color3.fromRGB(45,220,130), secondary=Color3.fromRGB(190,255,105)},
+    Crimson = {bg=Color3.fromRGB(14,4,7), panel=Color3.fromRGB(29,7,13), card=Color3.fromRGB(43,12,19), track=Color3.fromRGB(65,19,28), stroke=Color3.fromRGB(100,34,44), accent=Color3.fromRGB(255,42,67), secondary=Color3.fromRGB(255,145,70)},
+    Arctic = {bg=Color3.fromRGB(8,14,22), panel=Color3.fromRGB(15,27,39), card=Color3.fromRGB(24,42,57), track=Color3.fromRGB(37,61,78), stroke=Color3.fromRGB(59,91,111), accent=Color3.fromRGB(115,215,255), secondary=Color3.fromRGB(225,250,255)},
+    Sunset = {bg=Color3.fromRGB(17,7,12), panel=Color3.fromRGB(34,13,19), card=Color3.fromRGB(51,20,25), track=Color3.fromRGB(75,29,31), stroke=Color3.fromRGB(111,45,42), accent=Color3.fromRGB(255,105,65), secondary=Color3.fromRGB(255,205,75)}
+}
+EX.ThemeFX = nil
+function EX.applyVisualTheme(themeName)
+    local cfg = EX.ThemePresets[themeName]
+    if not cfg or not GUI or not GUI.Parent then return end
+    local old = {bg=Theme.bg, panel=Theme.panel, card=Theme.card, track=Theme.track, stroke=Theme.stroke, accent=Theme.accent}
+    local roots = {GUI, PlayerGui:FindFirstChild("DrxOverlay")}
+    for _, root in ipairs(roots) do
+        if root then
+            for _, d in ipairs(root:GetDescendants()) do
+                if d:IsA("GuiObject") then
+                    if d.BackgroundColor3 == old.bg then d.BackgroundColor3 = cfg.bg
+                    elseif d.BackgroundColor3 == old.panel then d.BackgroundColor3 = cfg.panel
+                    elseif d.BackgroundColor3 == old.card then d.BackgroundColor3 = cfg.card
+                    elseif d.BackgroundColor3 == old.track then d.BackgroundColor3 = cfg.track
+                    elseif d.BackgroundColor3 == old.accent then d.BackgroundColor3 = cfg.accent end
+                    if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+                        if d.TextColor3 == old.accent then d.TextColor3 = cfg.accent end
+                    end
+                    if d:IsA("ScrollingFrame") and d.ScrollBarImageColor3 == old.accent then d.ScrollBarImageColor3 = cfg.accent end
+                    if d:IsA("ImageLabel") or d:IsA("ImageButton") then
+                        if d.ImageColor3 == old.accent then d.ImageColor3 = cfg.accent end
+                    end
+                elseif d:IsA("UIStroke") then
+                    if d.Color == old.stroke then d.Color = cfg.stroke
+                    elseif d.Color == old.accent then d.Color = cfg.accent end
+                end
+            end
+        end
+    end
+    Theme.bg, Theme.panel, Theme.card, Theme.track, Theme.stroke, Theme.accent =
+        cfg.bg, cfg.panel, cfg.card, cfg.track, cfg.stroke, cfg.accent
+    EX.Palette.bg, EX.Palette.panel, EX.Palette.card, EX.Palette.track, EX.Palette.stroke =
+        cfg.bg, cfg.panel, cfg.card, cfg.track, cfg.stroke
+    EX.AccentColor = cfg.accent
+    Prefs.set_acc_preset = "Personalizado"
+    Prefs.set_acc_r, Prefs.set_acc_g, Prefs.set_acc_b = math.floor(cfg.accent.R*255), math.floor(cfg.accent.G*255), math.floor(cfg.accent.B*255)
+
+    if EX.ThemeFX and EX.ThemeFX.Parent then EX.ThemeFX:Destroy() end
+    local fx = Instance.new("Folder")
+    fx.Name = "EclypseThemeFX"
+    fx.Parent = TopBar
+    EX.ThemeFX = fx
+
+    local line = Instance.new("Frame")
+    line.Name = "AnimatedThemeLine"
+    line.BorderSizePixel = 0
+    line.BackgroundColor3 = cfg.accent
+    line.Position = UDim2.new(0, 0, 1, -3)
+    line.Size = UDim2.new(1, 0, 0, 3)
+    line.ZIndex = 30
+    line.Parent = fx
+    local grad = Instance.new("UIGradient")
+    grad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, cfg.accent),
+        ColorSequenceKeypoint.new(0.5, cfg.secondary),
+        ColorSequenceKeypoint.new(1, cfg.accent)
+    })
+    grad.Offset = Vector2.new(-1, 0)
+    grad.Parent = line
+    TweenService:Create(grad, TweenInfo.new(2.8, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1, false), {Offset=Vector2.new(1,0)}):Play()
+
+    local border = Main:FindFirstChildOfClass("UIStroke")
+    if border then
+        local bg = border:FindFirstChild("ThemeGradient")
+        if bg then bg:Destroy() end
+        local borderGrad = Instance.new("UIGradient")
+        borderGrad.Name = "ThemeGradient"
+        borderGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, cfg.accent),
+            ColorSequenceKeypoint.new(0.5, cfg.secondary),
+            ColorSequenceKeypoint.new(1, cfg.accent)
+        })
+        borderGrad.Parent = border
+        TweenService:Create(borderGrad, TweenInfo.new(5, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1, false), {Rotation=360}):Play()
+    end
+
+    -- Particulas discretas na barra: poucos objetos, sem loop por frame.
+    local rng = Random.new()
+    for i=1,7 do
+        local dot = Instance.new("Frame")
+        dot.Name = "ThemeSpark"..i
+        dot.BorderSizePixel = 0
+        dot.Size = UDim2.fromOffset(rng:NextInteger(2,4), rng:NextInteger(2,4))
+        dot.Position = UDim2.new(rng:NextNumber(0.05,0.95), 0, rng:NextNumber(0.15,0.8), 0)
+        dot.BackgroundColor3 = (i%2==0) and cfg.secondary or cfg.accent
+        dot.BackgroundTransparency = 0.15
+        dot.ZIndex = 25
+        dot.Parent = fx
+        local cr = Instance.new("UICorner"); cr.CornerRadius = UDim.new(1,0); cr.Parent = dot
+        local tw = TweenService:Create(dot, TweenInfo.new(rng:NextNumber(1.8,3.2), Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+            Position = dot.Position + UDim2.fromOffset(rng:NextInteger(-12,12), rng:NextInteger(-9,9)),
+            BackgroundTransparency = 0.75
+        })
+        tw:Play()
+    end
+    if EX.decorate then pcall(EX.decorate, GUI) end
+end
+-- ===== END THEME ENGINE =====
+
 AddPage("Configurações", function(c1, c2)
-    local g1 = CreateGroup(c1, "Universal Settings")
-    label(g1, {Size = UDim2.new(1, 0, 0, 34), Text = "Jogo: " .. tostring(game.Name) .. " | PlaceId: " .. tostring(game.PlaceId) .. " | Perfil: Universal", TextSize = 10, TextColor3 = Theme.sub, TextWrapped = true})
-    CreateToggle(g1, "Dynamic Island", "set_island", false); CreateToggle(g1, "Watermark HUD", "set_watermark", true); CreateToggle(g1, "Quick Access Keybind", "set_qaccess", false); CreateToggle(g1, "Mobile Toggle Button", "set_mobile", false); CreateKeybind(g1, "Menu Keybind", "misc_menukey", "RightShift", "Toggle")
+    local g1 = CreateGroup(c1, "Universal Settings"); CreateToggle(g1, "Dynamic Island", "set_island", false); CreateToggle(g1, "Watermark HUD", "set_watermark", true); CreateToggle(g1, "Quick Access Keybind", "set_qaccess", false); CreateToggle(g1, "Mobile Toggle Button", "set_mobile", false); CreateKeybind(g1, "Menu Keybind", "misc_menukey", "RightShift", "Toggle")
     local g2 = CreateGroup(c2, "Screen Ambience"); CreateSlider(g2, "Ambience Opacity", "set_opacity", 10, 100, 50); CreateToggle(g2, "Show Only When UI...", "set_showonly", true)
     local g3 = CreateGroup(c2, "Cor do Fundo (RGB)"); CreateSlider(g3, "Fundo - Vermelho", "set_bg_r", 0, 160, 0); CreateSlider(g3, "Fundo - Verde", "set_bg_g", 0, 160, 0); CreateSlider(g3, "Fundo - Azul", "set_bg_b", 0, 160, 0)
-    local gAcc = CreateGroup(c2, "Cor do Menu"); CreateDropdown(gAcc, "Tema", "set_acc_preset", {"Personalizado", "Vermelho", "Azul", "Roxo", "Verde", "Ciano", "Laranja", "Rosa", "Branco"}, "Personalizado"); CreateSlider(gAcc, "Menu - Vermelho", "set_acc_r", 0, 255, 255); CreateSlider(gAcc, "Menu - Verde", "set_acc_g", 0, 255, 40); CreateSlider(gAcc, "Menu - Azul", "set_acc_b", 0, 255, 60)
+    local gAcc = CreateGroup(c2, "Temas Animados"); CreateDropdown(gAcc, "Tema Visual", "set_visual_theme", {"Halloween", "Midnight", "Cyberpunk", "Ocean", "Sakura", "Emerald", "Crimson", "Arctic", "Sunset"}, "Halloween"); CreateDropdown(gAcc, "Cor do Destaque", "set_acc_preset", {"Personalizado", "Vermelho", "Azul", "Roxo", "Verde", "Ciano", "Laranja", "Rosa", "Branco"}, "Personalizado"); CreateSlider(gAcc, "Menu - Vermelho", "set_acc_r", 0, 255, 255); CreateSlider(gAcc, "Menu - Verde", "set_acc_g", 0, 255, 40); CreateSlider(gAcc, "Menu - Azul", "set_acc_b", 0, 255, 60)
     local gHud = CreateGroup(c1, "HUD & Janela")
     CreateSlider(gHud, "Toggle Size", "set_tglsize", 30, 90, 44); CreateSlider(gHud, "Toggle Rounding %", "set_tglround", 0, 100, 100); CreateSlider(gHud, "Toggle Background %", "set_tglbg", 0, 100, 0)
     CreateToggle(gHud, "Toggle Glow", "set_tglglow", true); CreateSlider(gHud, "Glow Intensity", "set_tglglowi", 0, 100, 60); CreateToggle(gHud, "Lock Toggle Position", "set_tgllock", false)
@@ -722,9 +839,8 @@ AddPage("Configurações", function(c1, c2)
     EX.Btn(gCom, "Unload Eclypse", nil, function() Confirm.Visible = true end)
     local gMenu = CreateGroup(c2, "Menu & Desempenho")
     CreateToggle(gMenu, "Click Sounds", "set_clicksnd", false); CreateSlider(gMenu, "ESP Rate (FPS)", "set_espfps", 15, 144, 60)
-    CreateToggle(gMenu, "Accent Animation", "set_accent_anim", false)
-    CreateSlider(gMenu, "Animation Speed", "set_accent_speed", 1, 10, 4)
 end)
+pcall(EX.applyVisualTheme, get("set_visual_theme", "Halloween"))
 AddPage("Hitbox", function(c1, c2)
     local g1 = CreateGroup(c1, "Hitbox Expander")
     EX.Info(g1, "How Hitboxes Work", "Turn on Hide Hitbox so big boxes don't block your screen. Higher See-Through fades the box out.")
@@ -770,26 +886,7 @@ local function guard(name, fn) return function(...)
     if not ok and not Warned[name] then Warned[name] = true; warn("[Eclypse] " .. name .. ": " .. tostring(err)) end
 end end
 local Cap = {mousemoverel = mousemoverel, mouse1click = mouse1click, hookmetamethod = hookmetamethod, newcclosure = newcclosure, checkcaller = checkcaller, getnamecallmethod = getnamecallmethod, setnamecallmethod = setnamecallmethod, getloadedmodules = getloadedmodules, require = require}
-local GameConfig = {
-    Build = "UNSET", Debug = true, Probe = false,
-    PlaceId = game.PlaceId, GameId = game.GameId, GameName = game.Name,
-    Profile = "Universal",
-    Weapon = {ToolModule = nil, Fields = {NoRecoil = nil, NoSpread = nil, InstantReload = nil, InfiniteMagazine = nil, FireCooldown = nil}},
-    SpectateProbe = nil
-}
--- Registre aqui somente perfis confirmados por PlaceId e estrutura real do jogo.
--- PlaceIds dos jogos das imagens não foram fornecidos, portanto nenhum ID/campo é inventado.
-GameConfig.Profiles = {}
-do
-    local profile = GameConfig.Profiles[game.PlaceId]
-    if profile then
-        GameConfig.Profile = profile.Name or ("PlaceId_" .. tostring(game.PlaceId))
-        if profile.Weapon then GameConfig.Weapon = profile.Weapon end
-        if profile.SpectateProbe then GameConfig.SpectateProbe = profile.SpectateProbe end
-    end
-    print(string.format("[Eclypse] jogo detectado: %s | PlaceId=%d | GameId=%d | Perfil=%s",
-        tostring(GameConfig.GameName), GameConfig.PlaceId, GameConfig.GameId, GameConfig.Profile))
-end
+local GameConfig = {Build = "UNSET", Debug = true, Probe = true, Weapon = {ToolModule = nil, Fields = {NoRecoil = nil, NoSpread = nil, InstantReload = nil, InfiniteMagazine = nil, FireCooldown = nil}}, SpectateProbe = nil}
 local Fire = {last = 0}
 local function clickFire() Fire.last = os.clock(); if type(Cap.mouse1click) == "function" then local ok = pcall(Cap.mouse1click); if ok then return end end; pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new()) end) end
 local function activateTool() Fire.last = os.clock(); local c = LP.Character; local t = c and c:FindFirstChildOfClass("Tool"); if t then pcall(function() t:Activate() end) end end
@@ -1218,42 +1315,48 @@ local function restoreWeapon()
     for _, e in ipairs(AutoW.list) do pcall(writeRef, e, e.orig) end; AutoW.list = {}
 end
 local function weaponScanJob(tool, char)
-    AutoW.scans = AutoW.scans + 1
-    AutoW.t0 = os.clock()
+    AutoW.scans = AutoW.scans + 1; AutoW.t0 = os.clock()
     AutoW.loadedSet, AutoW.byName = nil, nil
-    local mask = ""
-    for _, r in ipairs(WEAPON_RULES) do
-        if get(r.pref, false) then mask = mask .. r.pref end
-    end
-    if AutoW.mask ~= mask then
-        AutoW.mask = mask
-        AutoW.modDone = setmetatable({}, {__mode = "k"})
-    end
-
-    -- Busca limitada ao Tool equipado e seus descendentes; não enumera/require todos
-    -- os módulos carregados do jogo nem varre ReplicatedStorage inteiro.
-    if not tool or not tool.Parent then return end
-    pcall(scanInstance, tool, 180)
-    for _, d in ipairs(tool:GetDescendants()) do
-        if not UiMouse.alive then return end
-        if d:IsA("ModuleScript") and type(Cap.require) == "function" and not AutoW.modDone[d] then
-            AutoW.modDone[d] = true
-            local ok, tbl = pcall(Cap.require, d)
-            if ok and type(tbl) == "table" then
-                pcall(scanTable, tbl, 0, {}, d:GetFullName())
+    local loaded
+    if type(Cap.getloadedmodules) == "function" then
+        local ok, mods = pcall(Cap.getloadedmodules)
+        if ok and type(mods) == "table" then
+            loaded = mods; local s, bn = {}, {}
+            for _, m in ipairs(mods) do
+                if typeof(m) == "Instance" then s[m] = true; local k = m.Name:lower(); local l = bn[k]; if not l then l = {}; bn[k] = l end; l[#l + 1] = m end
             end
-        end
-        if os.clock() - AutoW.t0 >= 0.003 then
-            task.wait()
-            AutoW.t0 = os.clock()
+            AutoW.loadedSet, AutoW.byName = s, bn
         end
     end
-
+    local mask = ""; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then mask = mask .. r.pref end end
+    if AutoW.mask ~= mask then AutoW.mask = mask; AutoW.modDone = setmetatable({}, {__mode = "k"}) end
+    local roots = {}
+    if tool then roots[#roots + 1] = tool; for _, m in ipairs(modulesNamed(tool.Name)) do roots[#roots + 1] = m end end
+    if char then roots[#roots + 1] = char end
+    local cam = Workspace.CurrentCamera
+    if cam then for _, c in ipairs(cam:GetChildren()) do if c:IsA("Model") then roots[#roots + 1] = c; for _, m in ipairs(modulesNamed(c.Name)) do roots[#roots + 1] = m end end end end
+    for _, r in ipairs(roots) do
+        if not UiMouse.alive then return end
+        pcall(scanInstance, r, 400); task.wait(); AutoW.t0 = os.clock()
+    end
+    if loaded and type(Cap.require) == "function" then
+        for i, m in ipairs(loaded) do
+            if not UiMouse.alive then return end
+            if typeof(m) == "Instance" and not AutoW.modDone[m] then
+                AutoW.modDone[m] = true
+                if weaponishModule(m) then
+                    local ok2, t = pcall(Cap.require, m)
+                    if ok2 and type(t) == "table" then pcall(scanTable, t, 0, {}, m:GetFullName()) end
+                end
+            end
+            if i % 40 == 0 and os.clock() - AutoW.t0 > 0.003 then task.wait(); AutoW.t0 = os.clock() end
+        end
+    end
     for _, rule in ipairs(WEAPON_RULES) do
-        if get(rule.pref, false) and not AutoW.found[rule.pref] and not AutoW.warned[rule.pref] then
-            AutoW.warned[rule.pref] = true
-            warn("[Eclypse] " .. rule.label .. ": nenhum campo reconhecido no Tool equipado: " .. tool.Name)
-            notify(rule.label, "campo não reconhecido nesta arma")
+        if get(rule.pref, false) and AutoW.scans >= 2 and not AutoW.found[rule.pref] and not AutoW.warned[rule.pref] then
+            AutoW.warned[rule.pref] = true; warn("[Eclypse] " .. rule.label .. ": nenhum campo correspondente achado (arma equipada: " .. (tool and tool.Name or "nenhuma/Tool") .. ")")
+            notify(rule.label, "nada encontrado - veja o console")
+            if not AutoW.dumped then AutoW.dumped = true; dumpWeaponCandidates(tool) end
         end
     end
 end
@@ -1448,34 +1551,11 @@ local currentSpectators
 local HB = {slow = 0, mid = 0, hud = 0, boost = 0, lastHop = 0, tp = false, respawn = 0, bv = nil, paused = false, jump = setmetatable({}, {__mode = "k"}), vim = nil}
 local fpsAvg = 60
 local function stopFly() if HB.bv then pcall(function() HB.bv:Destroy() end); HB.bv = nil end end
-HB.noclipAt = 0
-local NoclipState = setmetatable({}, {__mode = "k"})
-local function setNoclip(character, enabled)
-    if not character then return end
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            if enabled then
-                if NoclipState[part] == nil then NoclipState[part] = part.CanCollide end
-                part.CanCollide = false
-            elseif NoclipState[part] ~= nil then
-                part.CanCollide = NoclipState[part]
-                NoclipState[part] = nil
-            end
-        end
-    end
-end
-local function restoreNoclip()
-    for part, original in pairs(NoclipState) do
-        if part and part.Parent then pcall(function() part.CanCollide = original end) end
-        NoclipState[part] = nil
-    end
-end
 local function onHeartbeat(dt)
     local char = LP.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); local hrp = char and char:FindFirstChild("HumanoidRootPart"); local cam = Workspace.CurrentCamera
     HB.slow = HB.slow + dt; HB.mid = HB.mid + dt; HB.hud = HB.hud + dt
     if get("ply_respawn") and (not hum or hum.Health <= 0) and os.clock() - HB.respawn > 0.3 then HB.respawn = os.clock(); pcall(function() HB.vim = HB.vim or game:GetService("VirtualInputManager"); HB.vim:SendKeyEvent(true, Enum.KeyCode.Space, false, game); task.delay(0.05, function() pcall(function() HB.vim:SendKeyEvent(false, Enum.KeyCode.Space, false, game) end) end) end) end
     if hum and hrp and hum.Health > 0 and cam then
-        if os.clock() - HB.noclipAt >= 0.1 then HB.noclipAt = os.clock(); if get("mv_noclip", false) then setNoclip(char, true) else restoreNoclip() end end
         local b = HB.jump[hum]; if not b then b = {jp = hum.JumpPower, jh = hum.JumpHeight}; HB.jump[hum] = b end; local typing = UserInputService:GetFocusedTextBox() ~= nil
         if not HB.paused then
             if get("bh_fatigue") then if hum.UseJumpPower then if hum.JumpPower < b.jp then hum.JumpPower = b.jp end elseif hum.JumpHeight < b.jh then hum.JumpHeight = b.jh end end
@@ -1487,7 +1567,7 @@ local function onHeartbeat(dt)
                 HB.bv.Velocity = (dir.Magnitude > 0) and dir.Unit * getNum("mv_flyspeed", 60) or Vector3.new(0, 0, 0)
             else stopFly() end
         else stopFly() end
-    else stopFly(); restoreNoclip() end
+    else stopFly() end
     if HB.mid >= 0.1 then HB.mid = 0; local active = get("cam_third") and bindActive("cam_key"); if active then local d = getNum("cam_dist", 12); LP.CameraMode = Enum.CameraMode.Classic; LP.CameraMaxZoomDistance = d; LP.CameraMinZoomDistance = d; HB.tp = true elseif HB.tp then HB.tp = false; LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end end
     if HB.slow >= 0.5 then HB.slow = 0; EX.timed("weaponPatchTick", weaponPatchTick); local want = get("misc_spect") or get("misc_antispect"); if want and os.clock() - (HB.specAt or 0) > 1.5 then HB.specAt = os.clock(); HB.specs = currentSpectators() end; local specs = want and (HB.specs or {}) or {}; if get("misc_spect") and #specs > 0 then Hud.spec.Text = "Spectators\n" .. table.concat(specs, "\n"); Hud.spec.Visible = true else Hud.spec.Visible = false end; local pause = get("misc_antispect") and #specs > 0; if pause ~= HB.paused then HB.paused = pause; notify("Anti Spectate", pause and "features paused" or "features resumed") end end
     if HB.hud >= 0.2 then HB.hud = 0; EX.timed("updateHud", updateHud, fpsAvg) end
@@ -1920,26 +2000,6 @@ RunService:BindToRenderStep("DrxMain", Enum.RenderPriority.Camera.Value + 1, fun
 Conns[#Conns + 1] = RunService.Heartbeat:Connect(function(dt) gHB(dt) end)
 Conns[#Conns + 1] = LP.Idled:Connect(function() if get("misc_afk") then pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton2(Vector2.new()) end) end end)
 
--- Accent animation opcional: anima somente o contorno e a faixa do topo.
--- A paleta de fundo e os presets permanecem intactos.
-do
-    local hue = 0
-    local accClock = 0
-    local animatedStroke = Main:FindFirstChildOfClass("UIStroke")
-    local topAccent = TopBar:FindFirstChild("TopAccentLine")
-    Conns[#Conns + 1] = RunService.Heartbeat:Connect(function(dt)
-        if not get("set_accent_anim", false) then return end
-        accClock = accClock + dt
-        if accClock < 0.08 then return end
-        local step = accClock
-        accClock = 0
-        hue = (hue + step * getNum("set_accent_speed", 4) * 0.08) % 1
-        local c = Color3.fromHSV(hue, 0.82, 1)
-        if animatedStroke then animatedStroke.Color = c end
-        if topAccent and topAccent.Parent then topAccent.BackgroundColor3 = c end
-    end)
-end
-
 local dragging, dragStart, startPos = false, nil, nil
 local function menuMatch(input, mk) return (input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == mk.Key) or (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB") or (input.UserInputType == Enum.UserInputType.MouseButton3 and mk.Key == "MMB") end
 Conns[#Conns + 1] = UserInputService.InputBegan:Connect(function(input, processed) if input.UserInputType == Enum.UserInputType.MouseButton1 and (not processed) and get("trc_on") and not GUI.Enabled then bulletLast = os.clock(); pcall(spawnBulletTracer) end; if processed then return end; local mk = get("misc_menukey", {Key = "RightShift", Mode = "Toggle"}); local match = menuMatch(input, mk); if mk.Mode == "Toggle" and match then GUI.Enabled = not GUI.Enabled elseif mk.Mode == "Hold" and match then GUI.Enabled = true end end)
@@ -1950,7 +2010,7 @@ Conns[#Conns + 1] = UserInputService.InputChanged:Connect(function(input) if dra
 EX.step(88, "Finalizing...")
 local cleaned = false
 local function cleanup()
-    if cleaned then return end; cleaned = true; if shared.DrxCleanup == cleanup then shared.DrxCleanup = nil end; Booted = false; if EX.destroyLoading then pcall(EX.destroyLoading) end; Silent.alive = false; Silent.target = nil; MouseDeltaHook.alive = false; pcall(function() RunService:UnbindFromRenderStep("DrxMain") end); for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end; UiMouse.setOpen(false); UiMouse.alive = false; stopFly(); restoreNoclip(); restoreWeapon(); pcall(EX.featureCleanup); for k, e in pairs(ESP) do destroyESP(e); ESP[k] = nil end; if HB.tp then pcall(function() LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end) end; Overlay:Destroy(); if GUI.Parent then GUI:Destroy() end
+    if cleaned then return end; cleaned = true; if shared.DrxCleanup == cleanup then shared.DrxCleanup = nil end; Booted = false; if EX.destroyLoading then pcall(EX.destroyLoading) end; Silent.alive = false; Silent.target = nil; MouseDeltaHook.alive = false; pcall(function() RunService:UnbindFromRenderStep("DrxMain") end); for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end; UiMouse.setOpen(false); UiMouse.alive = false; stopFly(); restoreWeapon(); pcall(EX.featureCleanup); for k, e in pairs(ESP) do destroyESP(e); ESP[k] = nil end; if HB.tp then pcall(function() LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end) end; Overlay:Destroy(); if GUI.Parent then GUI:Destroy() end
 end
 shared.DrxCleanup = cleanup
 doUnload = cleanup
@@ -1959,7 +2019,7 @@ UiMouse.setOpen(GUI.Enabled)
 Booted = true
 print("[Eclypse V30] pronto | silent-hook=" .. (SilentHooks.done and tostring(Silent.hooked) or "instala ao ligar o Silent") .. " | Build=" .. GameConfig.Build)
 do
-    local L = EX.Load or {target = 100, text = "Ready", ready = true, active = false}
+    local L = EX.Load
     L.target = 100; L.text = "Ready"
     local waited = 0
     while not L.ready and waited < 8 do waited = waited + task.wait() end
