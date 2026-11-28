@@ -1,4 +1,4 @@
--- Eclypse V30 (base: V29) | novo: animacoes (toast, troca de aba, hover, dropdown), abas Hitbox/Bots/Safety, configuracoes completas, menos carga por frame. Historico V29: | logo da foto do usuario (PNG transparente, 3 niveis de carregamento), cor do menu configuravel, efeitos ao abrir, otimizacoes de desempenho (cache de visibilidade, mira a 30Hz, ESP a 100Hz, profiler)
+-- Eclypse V31 (base: V30) | weapon: varredura so em tabelas de arma + getgc + Vector3, sem rescan constante | bots fora do alvo/ESP | ESP abaixo do menu | cursor nao trava ao fechar/sair | (V30) | novo: animacoes (toast, troca de aba, hover, dropdown), abas Hitbox/Bots/Safety, configuracoes completas, menos carga por frame. Historico V29: | logo da foto do usuario (PNG transparente, 3 niveis de carregamento), cor do menu configuravel, efeitos ao abrir, otimizacoes de desempenho (cache de visibilidade, mira a 30Hz, ESP a 100Hz, profiler)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -315,7 +315,7 @@ EX.buildLoading()
 EX.step(10, "Preparing environment...")
 
 local GUI = new("ScreenGui", {Name = "DrxHub", ResetOnSpawn = false, DisplayOrder = 100, ZIndexBehavior = Enum.ZIndexBehavior.Global, Enabled = false}, PlayerGui)
-local Overlay = new("ScreenGui", {Name = "DrxOverlay", ResetOnSpawn = false, DisplayOrder = 999, IgnoreGuiInset = true}, PlayerGui)
+local Overlay = new("ScreenGui", {Name = "DrxOverlay", ResetOnSpawn = false, DisplayOrder = 50, IgnoreGuiInset = true}, PlayerGui)
 
 -- UI MOUSE FIX
 local UiMouse = {open = false, saved = nil, wanted = nil, wantedIcon = nil, guess = nil, modal = nil, alive = true, hooked = false, hbConn = nil}
@@ -350,7 +350,7 @@ do
         if open == UiMouse.open then return end
         UiMouse.open = open
         if open then
-            UiMouse.saved = {behavior = UserInputService.MouseBehavior, icon = UserInputService.MouseIconEnabled}
+            UiMouse.saved = {behavior = UserInputService.MouseBehavior, icon = UserInputService.MouseIconEnabled}; UiMouse.savedChar = LP.Character
             UiMouse.wanted, UiMouse.wantedIcon, UiMouse.guess = nil, nil, nil
             local g = Instance.new("ScreenGui")
             g.Name = "DrxMouseModal"; g.ResetOnSpawn = false; g.IgnoreGuiInset = true; g.DisplayOrder = 1
@@ -370,7 +370,7 @@ do
             local sv = UiMouse.saved; UiMouse.saved = nil
             local beh, icon = UiMouse.wanted, UiMouse.wantedIcon
             local guess = UiMouse.guess; UiMouse.wanted, UiMouse.wantedIcon, UiMouse.guess = nil, nil, nil
-            local match = UiMouse.inMatch()
+            local match = UiMouse.inMatch() and UiMouse.savedChar ~= nil and UiMouse.savedChar == LP.Character; UiMouse.savedChar = nil
             if beh == nil then
                 beh = guess or (sv and sv.behavior)
                 if beh == Enum.MouseBehavior.LockCenter and not match then beh = Enum.MouseBehavior.Default end
@@ -807,7 +807,7 @@ local function initNPCs()
     end)
 end
 local function isEnemyPlayer(plr) if plr.Neutral or plr.Team == nil or LP.Team == nil then return true end; return plr.Team ~= LP.Team end
-local function buildEntity(char, plr) local hum = char:FindFirstChildOfClass("Humanoid"); local hrp = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("Head"); if not hum or not hrp or hum.Health <= 0 then return nil end; return {char = char, hum = hum, hrp = hrp, plr = plr, name = plr and plr.Name or char.Name} end
+local function buildEntity(char, plr) if char:GetAttribute("EclypseBot") then return nil end; local hum = char:FindFirstChildOfClass("Humanoid"); local hrp = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("Head"); if not hum or not hrp or hum.Health <= 0 then return nil end; return {char = char, hum = hum, hrp = hrp, plr = plr, name = plr and plr.Name or char.Name} end
 -- Heurística (assumida): NPC com atributo/valor "Team"/"TeamName" igual ao nome do meu time é aliado; sem informação = inimigo.
 local function npcEnemy(m)
     local mine = LP.Team; if not mine then return true end
@@ -1093,10 +1093,10 @@ local AutoW = {list = {}, seen = setmetatable({}, {__mode = "k"}), mods = {}, la
 local WEAPON_RULES = {
     {pref = "wpn_recoil", label = "No Recoil", test = function(k) return k:find("recoil") ~= nil end, value = function() return 0 end},
     {pref = "wpn_spread", label = "No Spread", test = function(k) return k:find("spread") ~= nil or k:find("inaccura") ~= nil or k:find("bloom") ~= nil end, value = function() return 0 end},
-    {pref = "wpn_reload", label = "Instant Reload", test = function(k) return k:find("reload") ~= nil and (k:find("time") ~= nil or k:find("duration") ~= nil or k:find("delay") ~= nil or k == "reload") end, value = function() return 0 end},
+    {pref = "wpn_reload", label = "Instant Reload", test = function(k) return k:find("reload") ~= nil and (k:find("time") ~= nil or k:find("duration") ~= nil or k:find("delay") ~= nil or k == "reload") end, value = function() return 0.03 end},
     {pref = "wpn_ammo", label = "Infinite Magazine", test = function(k) return (k:find("ammo") ~= nil or k:find("clip") ~= nil or k:find("magazine") ~= nil) and k:find("max") == nil end, value = function() return 999 end},
     {pref = "wpn_cd", label = "Custom Fire Cooldown", test = function(k) return k:find("cooldown") ~= nil or k:find("firedelay") ~= nil or k:find("fire_delay") ~= nil or k:find("shootdelay") ~= nil or k:find("shotdelay") ~= nil or k:find("firetime") ~= nil or k:find("timebetween") ~= nil or k:find("fireinterval") ~= nil or k:find("shootinterval") ~= nil or k:find("attackdelay") ~= nil or k == "delay" or k == "cd" end,
-        value = function(orig) local ms = getNum("wpn_cdval", 500); if type(orig) == "number" and orig >= 10 then return ms end; return ms / 1000 end},
+        value = function(orig) local ms = math.max(getNum("wpn_cdval", 500), 30); if type(orig) == "number" and orig >= 10 then return ms end; return ms / 1000 end},
 }
 local RuleKeys, RuleKeysN = {}, 0
 local function ruleFor(name)
@@ -1110,30 +1110,73 @@ local function ruleFor(name)
 end
 local function readRef(e) if e.kind == "attr" then return e.ref:GetAttribute(e.key) elseif e.kind == "val" then return e.ref.Value end; return e.ref[e.key] end
 local function writeRef(e, v) if e.kind == "attr" then e.ref:SetAttribute(e.key, v) elseif e.kind == "val" then e.ref.Value = v else e.ref[e.key] = v end end
+AutoW.FAMILY = {"recoil", "spread", "reload", "ammo", "clip", "magazine", "firerate", "cooldown", "rpm", "bloom", "damage", "bullet"}
+function AutoW.famHits(names)
+    local n, fam = 0, {}
+    for _, nm in ipairs(names) do local ln = tostring(nm):lower(); for _, f in ipairs(AutoW.FAMILY) do if not fam[f] and ln:find(f, 1, true) then fam[f] = true; n = n + 1; break end end end
+    return n
+end
+function AutoW.weaponHits(tbl)
+    local names, seen = {}, 0
+    for k in next, tbl do seen = seen + 1; if seen > 80 then break end; if type(k) == "string" then names[#names + 1] = k end end
+    return AutoW.famHits(names)
+end
+function AutoW.simpleValue(v) local t = typeof(v); return t == "number" or t == "Vector3" or t == "Vector2" end
 local function addEntry(kind, ref, key, rule, path)
+    if #AutoW.list >= 60 then return end
     local s = AutoW.seen[ref]; if not s then s = {}; AutoW.seen[ref] = s end
     if s[key] then return end
     local e = {kind = kind, ref = ref, key = key, rule = rule, path = path}
-    local ok, orig = pcall(readRef, e); if not ok or type(orig) ~= "number" then return end
+    local ok, orig = pcall(readRef, e); if not ok then return end
+    local ty = typeof(orig)
+    if not (ty == "number" or ((ty == "Vector3" or ty == "Vector2") and (rule.pref == "wpn_recoil" or rule.pref == "wpn_spread"))) then return end
     s[key] = true; e.orig = orig; AutoW.list[#AutoW.list + 1] = e; AutoW.found[rule.pref] = true
 end
-local function scanTable(tbl, depth, visited, path)
-    if visited[tbl] then return end; visited[tbl] = true
+-- so mexe em tabelas que PARECEM de arma (varias familias de campos: recoil/spread/reload/ammo/...), nunca em tabelas soltas do jogo
+local function scanTable(tbl, depth, visited, path, allowed)
+    if visited[tbl] or tbl == Prefs then return end; visited[tbl] = true
+    local ww = allowed or AutoW.weaponHits(tbl) >= (AutoW.minFam or 2)
     local cnt = 0
     for k, v in pairs(tbl) do
         cnt = cnt + 1; if cnt > 3000 then break end
-        AutoW.n = AutoW.n + 1; if AutoW.n % 200 == 0 and os.clock() - AutoW.t0 > 0.003 then task.wait(); AutoW.t0 = os.clock() end
+        AutoW.n = AutoW.n + 1; if AutoW.n % 200 == 0 and os.clock() - AutoW.t0 > 0.0015 then task.wait(); AutoW.t0 = os.clock() end
         if type(k) == "string" then
-            if type(v) == "number" then local r = ruleFor(k); if r then addEntry("tbl", tbl, k, r, path .. "." .. k) end
-            elseif type(v) == "table" and depth < 2 then scanTable(v, depth + 1, visited, path .. "." .. k) end
+            if AutoW.simpleValue(v) then
+                if ww then local r = ruleFor(k); if r then addEntry("tbl", tbl, k, r, path .. "." .. k) end end
+            elseif type(v) == "table" and depth < 2 then
+                local r = ww and ruleFor(k)
+                if r and (r.pref == "wpn_recoil" or r.pref == "wpn_spread") then
+                    for ck, cv in pairs(v) do if AutoW.simpleValue(cv) then addEntry("tbl", v, ck, r, path .. "." .. k .. "." .. tostring(ck)) end end
+                else scanTable(v, depth + 1, visited, path .. "." .. k, ww) end
+            end
         end
     end
+end
+function AutoW.gcScan()
+    if type(getgc) ~= "function" then return end
+    local ok, objs = pcall(getgc, true); if not ok or type(objs) ~= "table" then return end
+    AutoW.t0 = os.clock(); AutoW.minFam = 3
+    for i = 1, #objs do
+        local o = objs[i]
+        if type(o) == "table" and o ~= AutoW and o ~= Prefs then pcall(function() if AutoW.weaponHits(o) >= 3 then scanTable(o, 1, {}, "gc", true) end end) end
+        if i % 300 == 0 and os.clock() - AutoW.t0 > 0.0015 then task.wait(); AutoW.t0 = os.clock(); if not UiMouse.alive then break end end
+    end
+    AutoW.minFam = nil
 end
 local function scanInstance(root, limit)
     local n = 0
     local function visit(inst)
-        for name, val in pairs(inst:GetAttributes()) do if type(val) == "number" then local r = ruleFor(name); if r then addEntry("attr", inst, name, r, inst:GetFullName() .. "@" .. name) end end end
-        if inst:IsA("NumberValue") or inst:IsA("IntValue") then local r = ruleFor(inst.Name); if r then addEntry("val", inst, "Value", r, inst:GetFullName()) end
+        local attrs = inst:GetAttributes(); local names = {}
+        for name in pairs(attrs) do names[#names + 1] = name end
+        if #names >= 2 and AutoW.famHits(names) >= 2 then
+            for name, val in pairs(attrs) do if type(val) == "number" then local r = ruleFor(name); if r then addEntry("attr", inst, name, r, inst:GetFullName() .. "@" .. name) end end end
+        end
+        if inst:IsA("NumberValue") or inst:IsA("IntValue") then
+            local p = inst.Parent
+            if p then
+                local pn = {}; for _, c in ipairs(p:GetChildren()) do if c:IsA("ValueBase") then pn[#pn + 1] = c.Name end end
+                if AutoW.famHits(pn) >= 2 then local r = ruleFor(inst.Name); if r then addEntry("val", inst, "Value", r, inst:GetFullName()) end end
+            end
         elseif inst:IsA("ModuleScript") and type(Cap.require) == "function" and (AutoW.loadedSet == nil or AutoW.loadedSet[inst]) then
             local ok, t = pcall(Cap.require, inst); if ok and type(t) == "table" then pcall(scanTable, t, 0, {}, inst:GetFullName()) end
         end
@@ -1232,6 +1275,8 @@ local function weaponScanJob(tool, char)
             if i % 40 == 0 and os.clock() - AutoW.t0 > 0.003 then task.wait(); AutoW.t0 = os.clock() end
         end
     end
+    do local missing = false; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) and not AutoW.found[r.pref] then missing = true end end
+        if missing and type(getgc) == "function" and not AutoW.gcDone then AutoW.gcDone = true; notify("Weapon", "varredura profunda (1x)"); pcall(AutoW.gcScan) end end
     for _, rule in ipairs(WEAPON_RULES) do
         if get(rule.pref, false) and AutoW.scans >= 2 and not AutoW.found[rule.pref] and not AutoW.warned[rule.pref] then
             AutoW.warned[rule.pref] = true; warn("[Eclypse] " .. rule.label .. ": nenhum campo correspondente achado (arma equipada: " .. (tool and tool.Name or "nenhuma/Tool") .. ")")
@@ -1258,8 +1303,11 @@ local function weaponPatchTick()
         end
     end
     -- 2) descoberta automática por nome de campo (em thread separada: nunca varre no frame do Heartbeat)
-    local anyOn = false; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then anyOn = true end end
-    if anyOn and not AutoW.busy and os.clock() - AutoW.last > 5 then
+    local anyOn, maskS = false, ""; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then anyOn = true; maskS = maskS .. r.pref end end
+    local sig = (tool and tool.Name or "-") .. "|" .. maskS
+    if AutoW.sig ~= sig then AutoW.sig = sig; AutoW.tries = 0; AutoW.last = 0 end
+    if anyOn and not AutoW.busy and (AutoW.tries or 0) < 2 and os.clock() - AutoW.last > 6 then
+        AutoW.tries = (AutoW.tries or 0) + 1
         AutoW.busy = true
         task.spawn(function()
             local okc, errc = pcall(weaponScanJob, tool, char)
@@ -1269,8 +1317,14 @@ local function weaponPatchTick()
     end
     for i = #AutoW.list, 1, -1 do
         local e = AutoW.list[i]; local on = get(e.rule.pref, false)
-        local ok = pcall(function() local want = on and e.rule.value(e.orig) or e.orig; if readRef(e) ~= want then writeRef(e, want) end end)
-        if on and ok and not e.logged then e.logged = true; AutoW.nlog = (AutoW.nlog or 0) + 1; if AutoW.nlog <= 15 then print("[Eclypse] " .. e.rule.label .. ": " .. e.path .. "  " .. tostring(e.orig) .. " -> " .. tostring(e.rule.value(e.orig)) .. "  (se nada mudar, troque de arma 1/2/3: o jogo pode copiar o valor ao equipar)") end end
+        local want = e.orig
+        if on then
+            if type(e.orig) == "number" then want = e.rule.value(e.orig)
+            elseif typeof(e.orig) == "Vector3" then want = Vector3.new(0, 0, 0)
+            elseif typeof(e.orig) == "Vector2" then want = Vector2.new(0, 0) end
+        end
+        local ok = pcall(function() if readRef(e) ~= want then writeRef(e, want) end end)
+        if on and ok and not e.logged then e.logged = true; AutoW.nlog = (AutoW.nlog or 0) + 1; if AutoW.nlog <= 15 then print("[Eclypse] " .. e.rule.label .. ": " .. e.path .. "  " .. tostring(e.orig) .. " -> " .. tostring(want) .. "  (se nada mudar, troque de arma 1/2/3: o jogo pode copiar o valor ao equipar)") end end
         if (not ok) or (not on) then table.remove(AutoW.list, i); local sn = AutoW.seen[e.ref]; if sn then sn[e.key] = nil end end
     end
 end
@@ -1697,7 +1751,7 @@ do
         end
         return LP.Character
     end
-    function EX.botSpawn()
+    function EX.botSpawnRaw()
         local me = LP.Character; local hrp = me and me:FindFirstChild("HumanoidRootPart")
         if not hrp then notify("Bots", "no character yet"); return end
         local n = math.clamp(getNum("bot_count", 3), 1, 10)
@@ -1717,8 +1771,8 @@ do
                     local hum = clone:FindFirstChildOfClass("Humanoid"); local chrp = clone:FindFirstChild("HumanoidRootPart")
                     if hum and chrp then
                         local idx = #Bots.list + 1
-                        clone.Name = "EclypseBot" .. idx; hum.DisplayName = "Bot " .. idx; hum.WalkSpeed = getNum("bot_speed", 16)
-                        clone.Parent = Workspace
+                        clone:SetAttribute("EclypseBot", true); clone.Name = "EclypseBot" .. idx; hum.DisplayName = "Bot " .. idx; hum.WalkSpeed = getNum("bot_speed", 16)
+                        clone.Parent = Workspace; hum.PlatformStand = false; hum.BreakJointsOnDeath = false; chrp.Anchored = false; if hum.Health <= 0 then hum.Health = hum.MaxHealth end
                         clone:PivotTo(hrp.CFrame * CFrame.new((i - (n + 1) / 2) * 3, 0, 4))
                         local animator = hum:FindFirstChildOfClass("Animator") or Instance.new("Animator", hum)
                         local ids = ANIM[hum.RigType == Enum.HumanoidRigType.R15 and "R15" or "R6"]
@@ -1736,6 +1790,12 @@ do
             end
         end
         notify("Bots", "Spawned " .. spawned .. " bots")
+    end
+    function EX.botSpawn()
+        local before = #Bots.list
+        local ok, err = pcall(EX.botSpawnRaw)
+        if not ok then warn("[Eclypse] bots: " .. tostring(err)); notify("Bots", "erro - veja o console")
+        elseif #Bots.list == before then warn("[Eclypse] bots: nenhum clone criado (o personagem deste jogo nao pode ser clonado ou nao tem Humanoid/HumanoidRootPart)"); notify("Bots", "nenhum bot criado - veja o console") end
     end
     function EX.botBring()
         local me = LP.Character; local hrp = me and me:FindFirstChild("HumanoidRootPart"); if not hrp then return end
@@ -1897,7 +1957,7 @@ doUnload = cleanup
 GUI.Destroying:Connect(cleanup)
 UiMouse.setOpen(GUI.Enabled)
 Booted = true
-print("[Eclypse V30] pronto | silent-hook=" .. (SilentHooks.done and tostring(Silent.hooked) or "instala ao ligar o Silent") .. " | Build=" .. GameConfig.Build)
+print("[Eclypse V31] pronto | silent-hook=" .. (SilentHooks.done and tostring(Silent.hooked) or "instala ao ligar o Silent") .. " | Build=" .. GameConfig.Build)
 do
     local L = EX.Load
     L.target = 100; L.text = "Ready"
