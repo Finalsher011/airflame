@@ -690,7 +690,7 @@ AddPage("Legit", function(c1, c2)
 end)
 AddPage("Misc", function(c1, c2)
     local g1 = CreateGroup(c1, "Misc"); CreateToggle(g1, "Spectator list", "misc_spect", false); CreateToggle(g1, "Anti Spectate", "misc_antispect", false); CreateToggle(g1, "Anti AFK", "misc_afk", true); CreateToggle(g1, "Bhop", "misc_bhop", false); CreateSlider(g1, "Speed Per Jump", "bh_inc", 0, 10, 2); CreateSlider(g1, "Max Speed", "bh_max", 16, 100, 32); CreateToggle(g1, "No Jump Fatigue", "bh_fatigue", true)
-    local g3 = CreateGroup(c1, "Movement"); CreateToggle(g3, "Speed", "mv_speed", false); CreateKeybind(g3, "Speed Key", "mv_speed_key", "Always", "Always"); CreateSlider(g3, "Extra Speed", "mv_extra", 0, 50, 6); CreateToggle(g3, "Fly", "mv_fly", false); CreateKeybind(g3, "Fly Key", "mv_fly_key", "Always", "Always"); CreateSlider(g3, "Fly Speed", "mv_flyspeed", 10, 200, 60)
+    local g3 = CreateGroup(c1, "Movement"); CreateToggle(g3, "Speed", "mv_speed", false); CreateKeybind(g3, "Speed Key", "mv_speed_key", "Always", "Always"); CreateSlider(g3, "Extra Speed", "mv_extra", 0, 50, 6); CreateToggle(g3, "Fly", "mv_fly", false); CreateKeybind(g3, "Fly Key", "mv_fly_key", "Always", "Always"); CreateSlider(g3, "Fly Speed", "mv_flyspeed", 10, 200, 60); CreateToggle(g3, "NoClip", "misc_noclip", false); CreateKeybind(g3, "NoClip Key", "misc_noclip_key", "Always", "Always")
     local g2 = CreateGroup(c2, "Camera"); CreateToggle(g2, "Third Person", "cam_third", false); CreateKeybind(g2, "Third Person Key", "cam_key", "V", "Toggle"); CreateSlider(g2, "ThirdPerson Distance", "cam_dist", 5, 50, 12)
 end)
 AddPage("Inventory Changer", function(c1, c2) local g1 = CreateGroup(c1, "Skins"); label(g1, {Size = UDim2.new(1, 0, 0, 20), Text = "Em breve...", TextSize = 14, TextColor3 = Theme.sub}) end)
@@ -1644,15 +1644,26 @@ do
 end
 
 local currentSpectators
-local HB = {slow = 0, mid = 0, hud = 0, boost = 0, lastHop = 0, tp = false, respawn = 0, bv = nil, paused = false, jump = setmetatable({}, {__mode = "k"}), vim = nil}
+local HB = {slow = 0, mid = 0, hud = 0, boost = 0, lastHop = 0, tp = false, respawn = 0, bv = nil, paused = false, jump = setmetatable({}, {__mode = "k"}), vim = nil, noclip = setmetatable({}, {__mode = "k"})}
 local fpsAvg = 60
 local function stopFly() if HB.bv then pcall(function() HB.bv:Destroy() end); HB.bv = nil end end
+local function noclipRestore(char)
+    local st = HB.noclip[char]; if not st then return end
+    for part, orig in pairs(st.parts) do if part.Parent then pcall(function() part.CanCollide = orig end) end end
+    HB.noclip[char] = nil
+end
+local function noclipRestoreAll() for char in pairs(HB.noclip) do noclipRestore(char) end end
 local function onHeartbeat(dt)
     local char = LP.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); local hrp = char and char:FindFirstChild("HumanoidRootPart"); local cam = Workspace.CurrentCamera
     HB.slow = HB.slow + dt; HB.mid = HB.mid + dt; HB.hud = HB.hud + dt
     if get("ply_respawn") and (not hum or hum.Health <= 0) and os.clock() - HB.respawn > 0.3 then HB.respawn = os.clock(); pcall(function() HB.vim = HB.vim or game:GetService("VirtualInputManager"); HB.vim:SendKeyEvent(true, Enum.KeyCode.Space, false, game); task.delay(0.05, function() pcall(function() HB.vim:SendKeyEvent(false, Enum.KeyCode.Space, false, game) end) end) end) end
     if hum and hrp and hum.Health > 0 and cam then
         local b = HB.jump[hum]; if not b then b = {jp = hum.JumpPower, jh = hum.JumpHeight}; HB.jump[hum] = b end; local typing = UserInputService:GetFocusedTextBox() ~= nil
+        local wantNoclip = get("misc_noclip") and bindActive("misc_noclip_key")
+        if wantNoclip and not HB.paused then
+            local st = HB.noclip[char]; if not st then st = {parts = {}}; HB.noclip[char] = st end
+            for part in pairs(st.parts) do if part.Parent and part.CanCollide then part.CanCollide = false end end
+        else noclipRestore(char) end
         if not HB.paused then
             if get("bh_fatigue") then if hum.UseJumpPower then if hum.JumpPower < b.jp then hum.JumpPower = b.jp end elseif hum.JumpHeight < b.jh then hum.JumpHeight = b.jh end end
             if get("mv_speed") and bindActive("mv_speed_key") and hum.MoveDirection.Magnitude > 0.1 then hrp.CFrame = hrp.CFrame + hum.MoveDirection * getNum("mv_extra", 6) * dt end
@@ -1663,8 +1674,15 @@ local function onHeartbeat(dt)
                 HB.bv.Velocity = (dir.Magnitude > 0) and dir.Unit * getNum("mv_flyspeed", 60) or Vector3.new(0, 0, 0)
             else stopFly() end
         else stopFly() end
-    else stopFly() end
-    if HB.mid >= 0.1 then HB.mid = 0; local active = get("cam_third") and bindActive("cam_key"); if active then local d = getNum("cam_dist", 12); LP.CameraMode = Enum.CameraMode.Classic; LP.CameraMaxZoomDistance = d; LP.CameraMinZoomDistance = d; HB.tp = true elseif HB.tp then HB.tp = false; LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end end
+    else stopFly(); noclipRestoreAll() end
+    if HB.mid >= 0.1 then HB.mid = 0
+        if get("misc_noclip") and bindActive("misc_noclip_key") and not HB.paused and char then
+            local st = HB.noclip[char]; if not st then st = {parts = {}}; HB.noclip[char] = st end
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") and part.CanCollide and st.parts[part] == nil then st.parts[part] = true; part.CanCollide = false end
+            end
+        end
+        local active = get("cam_third") and bindActive("cam_key"); if active then local d = getNum("cam_dist", 12); LP.CameraMode = Enum.CameraMode.Classic; LP.CameraMaxZoomDistance = d; LP.CameraMinZoomDistance = d; HB.tp = true elseif HB.tp then HB.tp = false; LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end end
     if HB.slow >= 0.5 then HB.slow = 0; local want = get("misc_spect") or get("misc_antispect"); if want and os.clock() - (HB.specAt or 0) > 1.5 then HB.specAt = os.clock(); HB.specs = currentSpectators() end; local specs = want and (HB.specs or {}) or {}; if get("misc_spect") and #specs > 0 then Hud.spec.Text = "Spectators\n" .. table.concat(specs, "\n"); Hud.spec.Visible = true else Hud.spec.Visible = false end; local pause = get("misc_antispect") and #specs > 0; if pause ~= HB.paused then HB.paused = pause; notify("Anti Spectate", pause and "features paused" or "features resumed") end end
     if HB.hud >= 0.2 then HB.hud = 0; EX.timed("updateHud", updateHud, fpsAvg) end
 end
@@ -2106,7 +2124,7 @@ Conns[#Conns + 1] = UserInputService.InputChanged:Connect(function(input) if dra
 EX.step(88, "Finalizing...")
 local cleaned = false
 local function cleanup()
-    if cleaned then return end; cleaned = true; if shared.DrxCleanup == cleanup then shared.DrxCleanup = nil end; Booted = false; if EX.destroyLoading then pcall(EX.destroyLoading) end; Silent.alive = false; Silent.target = nil; MouseDeltaHook.alive = false; pcall(function() RunService:UnbindFromRenderStep("DrxMain") end); for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end; UiMouse.setOpen(false); UiMouse.alive = false; stopFly(); restoreWeapon(); pcall(EX.featureCleanup); for k, e in pairs(ESP) do destroyESP(e); ESP[k] = nil end; if HB.tp then pcall(function() LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end) end; Overlay:Destroy(); if GUI.Parent then GUI:Destroy() end
+    if cleaned then return end; cleaned = true; if shared.DrxCleanup == cleanup then shared.DrxCleanup = nil end; Booted = false; if EX.destroyLoading then pcall(EX.destroyLoading) end; Silent.alive = false; Silent.target = nil; MouseDeltaHook.alive = false; pcall(function() RunService:UnbindFromRenderStep("DrxMain") end); for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end; UiMouse.setOpen(false); UiMouse.alive = false; stopFly(); noclipRestoreAll(); restoreWeapon(); pcall(EX.featureCleanup); for k, e in pairs(ESP) do destroyESP(e); ESP[k] = nil end; if HB.tp then pcall(function() LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end) end; Overlay:Destroy(); if GUI.Parent then GUI:Destroy() end
 end
 shared.DrxCleanup = cleanup
 doUnload = cleanup
