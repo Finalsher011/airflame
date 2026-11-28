@@ -670,7 +670,7 @@ end
 AddPage("Rage", function(c1, c2)
     local g1 = CreateGroup(c1, "Ragebot"); CreateToggle(g1, "Ragebot", "rage_on", false); CreateKeybind(g1, "Ragebot Key", "rage_key", "Always", "Always"); CreateToggle(g1, "Wallbang", "rage_wall", false); CreateSlider(g1, "FOV", "rage_fov", 10, 360, 120); CreateSlider(g1, "FOV Size", "rage_fovsize", 10, 800, 720); CreateKeybind(g1, "Auto Shoot", "rage_autoshoot", "Always", "Always"); CreateToggle(g1, "Team Check", "rage_team", true)
     local g3 = CreateGroup(c1, "Kill All"); CreateToggle(g3, "Kill All", "ra_kill", false); CreateKeybind(g3, "Kill All Key", "ra_kill_key", "Always", "Always"); CreateToggle(g3, "Use Gun", "ra_kill_gun", true)
-    local g2 = CreateGroup(c2, "Weapon Mods"); CreateToggle(g2, "Rapid Fire", "wpn_rapid", false); CreateToggle(g2, "No Recoil", "wpn_recoil", false); CreateToggle(g2, "No Spread", "wpn_spread", false); CreateToggle(g2, "Instant Reload", "wpn_reload", false); CreateToggle(g2, "Infinite Magazine", "wpn_ammo", false); CreateToggle(g2, "Custom Fire Cooldown", "wpn_cd", false); CreateSlider(g2, "Fire Cooldown (ms)", "wpn_cdval", 0, 1000, 500)
+    local g2 = CreateGroup(c2, "Weapon Mods"); CreateToggle(g2, "Rapid Fire", "wpn_rapid", false); CreateToggle(g2, "No Recoil", "wpn_recoil", false); CreateToggle(g2, "No Spread", "wpn_spread", false); CreateToggle(g2, "Instant Reload", "wpn_reload", false); CreateToggle(g2, "Infinite Magazine", "wpn_ammo", false); CreateToggle(g2, "Custom Fire Cooldown", "wpn_cd", false); CreateSlider(g2, "Fire Cooldown (ms)", "wpn_cdval", 0, 1000, 500); EX.Btn(g2, "Dump Weapon Fields (console)", nil, function() EX.weaponDump() end)
     local g4 = CreateGroup(c2, "Player"); CreateToggle(g4, "Auto Respawn", "ply_respawn", false)
 end)
 AddPage("Legit", function(c1, c2)
@@ -792,7 +792,7 @@ local function bindActive(k) local st = BindState[k]; return st ~= nil and st.on
 local FrameNo, NPCs, NPCInit = 0, {}, false
 local function initNPCs()
     if NPCInit then return end; NPCInit = true
-    local function consider(inst) if inst.ClassName == "Humanoid" then local m = inst.Parent; if m and m:IsA("Model") and m ~= LP.Character and not Players:GetPlayerFromCharacter(m) then NPCs[m] = true end end end
+    local function consider(inst) if inst.ClassName == "Humanoid" then local m = inst.Parent; if m and m:IsA("Model") and m ~= LP.Character and not m:GetAttribute("EclypseBot") and not Players:GetPlayerFromCharacter(m) then NPCs[m] = true end end end
     Conns[#Conns + 1] = Workspace.DescendantAdded:Connect(consider)
     Conns[#Conns + 1] = Workspace.DescendantRemoving:Connect(function(d) if d.ClassName == "Humanoid" and d.Parent then NPCs[d.Parent] = nil end end)
     task.spawn(function()
@@ -822,7 +822,7 @@ local function entities()
     local _t = os.clock(); if EntCache.t and _t - EntCache.t < 0.033 then return EntCache.list end; EntCache.t = _t
     local list, by = {}, {}
     for _, plr in ipairs(Players:GetPlayers()) do if plr ~= LP and plr.Character then local e = buildEntity(plr.Character, plr); if e then e.enemy = isEnemyPlayer(plr); list[#list + 1] = e; by[e.char] = e end end end
-    if NPCInit then for m in pairs(NPCs) do if m.Parent and not Players:GetPlayerFromCharacter(m) then local e = buildEntity(m, nil); if e then e.enemy = npcEnemy(m); e.npc = true; list[#list + 1] = e; by[m] = e end else NPCs[m] = nil end end end
+    if NPCInit then for m in pairs(NPCs) do if m.Parent and not m:GetAttribute("EclypseBot") and not Players:GetPlayerFromCharacter(m) then local e = buildEntity(m, nil); if e then e.enemy = npcEnemy(m); e.npc = true; list[#list + 1] = e; by[m] = e end else NPCs[m] = nil end end end
     EntCache.frame = FrameNo; EntCache.list = list; EntCache.byChar = by; return list
 end
 local Track = {}
@@ -1087,42 +1087,55 @@ local function runTrigger(cam, dt)
     if math.random() * 100 > chance then return end; if get("trg_gun", true) then clickFire() else activateTool() end
 end
 
-local Patched, WeaponWarned = {}, {}
-local AutoW = {list = {}, seen = setmetatable({}, {__mode = "k"}), mods = {}, last = 0, lmLast = 0, n = 0, t0 = 0, mask = "", modDone = setmetatable({}, {__mode = "k"}), scans = 0, found = {}, warned = {}}
--- Regras HEURÍSTICAS por nome de campo (lido do jogo em runtime; nada é hardcoded de build). Valores aplicados: 0 / 999 / slider.
+local Patched = {}
+local AutoW = {list = {}, seen = setmetatable({}, {__mode = "k"}), count = {}, sig = nil, busy = false, t0 = 0, n = 0, nodes = 0, nlog = 0, warned = {}, loadedSet = nil, byName = nil}
+local MAX_PER_RULE = 8
+-- Heuristic rules by field name (read from the game at runtime; no build-specific data is hardcoded)
 local WEAPON_RULES = {
     {pref = "wpn_recoil", label = "No Recoil", test = function(k) return k:find("recoil") ~= nil end, value = function() return 0 end},
     {pref = "wpn_spread", label = "No Spread", test = function(k) return k:find("spread") ~= nil or k:find("inaccura") ~= nil or k:find("bloom") ~= nil end, value = function() return 0 end},
     {pref = "wpn_reload", label = "Instant Reload", test = function(k) return k:find("reload") ~= nil and (k:find("time") ~= nil or k:find("duration") ~= nil or k:find("delay") ~= nil or k == "reload") end, value = function() return 0 end},
     {pref = "wpn_ammo", label = "Infinite Magazine", test = function(k) return (k:find("ammo") ~= nil or k:find("clip") ~= nil or k:find("magazine") ~= nil) and k:find("max") == nil end, value = function() return 999 end},
-    {pref = "wpn_cd", label = "Custom Fire Cooldown", test = function(k) return k:find("cooldown") ~= nil or k:find("firedelay") ~= nil or k:find("fire_delay") ~= nil or k:find("shootdelay") ~= nil or k:find("shotdelay") ~= nil or k:find("firetime") ~= nil or k:find("timebetween") ~= nil or k:find("fireinterval") ~= nil or k:find("shootinterval") ~= nil or k:find("attackdelay") ~= nil or k == "delay" or k == "cd" end,
+    {pref = "wpn_cd", label = "Custom Fire Cooldown", test = function(k) return k:find("cooldown") ~= nil or k:find("firedelay") ~= nil or k:find("fire_delay") ~= nil or k:find("shootdelay") ~= nil or k:find("shotdelay") ~= nil or k:find("firetime") ~= nil or k:find("timebetween") ~= nil or k:find("fireinterval") ~= nil or k:find("shootinterval") ~= nil or k:find("attackdelay") ~= nil end,
         value = function(orig) local ms = getNum("wpn_cdval", 500); if type(orig) == "number" and orig >= 10 then return ms end; return ms / 1000 end},
 }
+local KEY_SKIP = {"sound", "anim", "effect", "gui", "text", "name", "type", "color", "visual", "particle", "icon", "price", "shop", "upgrade", "reserve", "max"}
 local RuleKeys, RuleKeysN = {}, 0
 local function ruleFor(name)
     local k = tostring(name):lower()
     local hits = RuleKeys[k]
     if hits == nil then
-        hits = {}; for _, r in ipairs(WEAPON_RULES) do if r.test(k) then hits[#hits + 1] = r end end
+        hits = {}
+        local skip = false
+        for _, s in ipairs(KEY_SKIP) do if k:find(s, 1, true) then skip = true; break end end
+        if not skip then for _, r in ipairs(WEAPON_RULES) do if r.test(k) then hits[#hits + 1] = r end end end
         if RuleKeysN < 20000 then RuleKeys[k] = hits; RuleKeysN = RuleKeysN + 1 end
     end
     for i = 1, #hits do if get(hits[i].pref, false) then return hits[i] end end
 end
 local function readRef(e) if e.kind == "attr" then return e.ref:GetAttribute(e.key) elseif e.kind == "val" then return e.ref.Value end; return e.ref[e.key] end
 local function writeRef(e, v) if e.kind == "attr" then e.ref:SetAttribute(e.key, v) elseif e.kind == "val" then e.ref.Value = v else e.ref[e.key] = v end end
+local function pace()
+    AutoW.n = AutoW.n + 1
+    if AutoW.n % 40 == 0 and os.clock() - AutoW.t0 > 0.002 then task.wait(); AutoW.t0 = os.clock() end
+    return UiMouse.alive
+end
 local function addEntry(kind, ref, key, rule, path)
+    if (AutoW.count[rule.pref] or 0) >= MAX_PER_RULE then return end
     local s = AutoW.seen[ref]; if not s then s = {}; AutoW.seen[ref] = s end
     if s[key] then return end
     local e = {kind = kind, ref = ref, key = key, rule = rule, path = path}
     local ok, orig = pcall(readRef, e); if not ok or type(orig) ~= "number" then return end
-    s[key] = true; e.orig = orig; AutoW.list[#AutoW.list + 1] = e; AutoW.found[rule.pref] = true
+    s[key] = true; e.orig = orig; AutoW.list[#AutoW.list + 1] = e
+    AutoW.count[rule.pref] = (AutoW.count[rule.pref] or 0) + 1
 end
 local function scanTable(tbl, depth, visited, path)
-    if visited[tbl] then return end; visited[tbl] = true
+    if visited[tbl] or AutoW.nodes > 2500 then return end
+    visited[tbl] = true; AutoW.nodes = AutoW.nodes + 1
     local cnt = 0
     for k, v in pairs(tbl) do
-        cnt = cnt + 1; if cnt > 3000 then break end
-        AutoW.n = AutoW.n + 1; if AutoW.n % 200 == 0 and os.clock() - AutoW.t0 > 0.003 then task.wait(); AutoW.t0 = os.clock() end
+        cnt = cnt + 1; if cnt > 400 then break end
+        if not pace() then return end
         if type(k) == "string" then
             if type(v) == "number" then local r = ruleFor(k); if r then addEntry("tbl", tbl, k, r, path .. "." .. k) end
             elseif type(v) == "table" and depth < 2 then scanTable(v, depth + 1, visited, path .. "." .. k) end
@@ -1134,33 +1147,36 @@ local function scanInstance(root, limit)
     local function visit(inst)
         for name, val in pairs(inst:GetAttributes()) do if type(val) == "number" then local r = ruleFor(name); if r then addEntry("attr", inst, name, r, inst:GetFullName() .. "@" .. name) end end end
         if inst:IsA("NumberValue") or inst:IsA("IntValue") then local r = ruleFor(inst.Name); if r then addEntry("val", inst, "Value", r, inst:GetFullName()) end
-        elseif inst:IsA("ModuleScript") and type(Cap.require) == "function" and (AutoW.loadedSet == nil or AutoW.loadedSet[inst]) then
+        elseif inst:IsA("ModuleScript") and AutoW.loadedSet and AutoW.loadedSet[inst] and type(Cap.require) == "function" then
             local ok, t = pcall(Cap.require, inst); if ok and type(t) == "table" then pcall(scanTable, t, 0, {}, inst:GetFullName()) end
         end
     end
     visit(root)
-    for _, d in ipairs(root:GetDescendants()) do n = n + 1; if n > limit then break end; visit(d) end
+    for _, d in ipairs(root:GetDescendants()) do n = n + 1; if n > limit then break end; visit(d); if not pace() then return end end
 end
-local function modulesNamed(name)
-    local key = name:lower()
-    if AutoW.byName then return AutoW.byName[key] or {} end
-    local c = AutoW.mods[key]; if c then return c end
-    c = {}; AutoW.mods[key] = c
-    for _, d in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do if d:IsA("ModuleScript") and d.Name:lower() == key then c[#c + 1] = d end end
-    return c
-end
-local WEAPON_MOD_HINT = {"weapon", "gun", "firearm", "tool", "arsenal", "loadout", "shoot", "combat", "fire", "item", "stat", "config", "setting", "data", "viewmodel", "ammo", "bullet", "projectile", "recoil"}
-local WEAPON_MOD_SKIP = {"shop", "store", "price", "currency", "quest", "mission", "chat", "leaderboard", "sound", "audio", "anim", "emote", "menu"}
+local MOD_HINT = {"weapon", "gun", "firearm", "arsenal", "loadout", "viewmodel", "ballistic", "projectile", "recoil"}
+local MOD_SKIP = {"shop", "store", "price", "currency", "quest", "mission", "chat", "leaderboard", "sound", "audio", "anim", "emote", "menu", "gui"}
 local function weaponishModule(m)
     local own = m.Name:lower()
-    for _, s in ipairs(WEAPON_MOD_SKIP) do if string.find(own, s, 1, true) then return false end end
-    local full = m:GetFullName():lower()
-    for _, h in ipairs(WEAPON_MOD_HINT) do if string.find(full, h, 1, true) then return true end end
+    for _, s in ipairs(MOD_SKIP) do if own:find(s, 1, true) then return false end end
+    local p, depth = m, 0
+    while p and p ~= game and depth < 4 do
+        local nm = p.Name:lower()
+        for _, h in ipairs(MOD_HINT) do if nm:find(h, 1, true) then return true end end
+        p = p.Parent; depth = depth + 1
+    end
     return false
+end
+local function weaponContext()
+    local char = LP.Character; local tool = char and char:FindFirstChildOfClass("Tool")
+    if tool then return tool, tool.Name, nil end
+    local cam = Workspace.CurrentCamera
+    if cam then for _, c in ipairs(cam:GetChildren()) do if c:IsA("Model") then return nil, c.Name, c end end end
+    return nil, nil, nil
 end
 local DUMP_PAT = {"fire", "shoot", "shot", "rate", "rpm", "delay", "cool", "interval", "recoil", "spread", "reload", "ammo", "clip", "kick", "bloom"}
 local function dumpWeaponCandidates(tool)
-    print("[Eclypse] Nada achado automaticamente. Campos numericos candidatos nos modulos ja carregados pelo jogo (cole estas linhas para fixar GameConfig.Weapon):")
+    print("[Eclypse] Numeric candidate fields in modules already loaded by the game (paste these lines to pin GameConfig.Weapon):")
     local shown = 0
     local function consider(path, tbl, depth, visited)
         if visited[tbl] or shown >= 120 then return end; visited[tbl] = true
@@ -1185,64 +1201,61 @@ local function dumpWeaponCandidates(tool)
                 end
             end
         end
-    else print("  executor sem getloadedmodules: abra o Dex e me envie o ModuleScript da arma equipada") end
+    else print("  executor has no getloadedmodules: open Dex and send me the ModuleScript of the equipped weapon") end
     local cam = Workspace.CurrentCamera
-    if cam then for _, c in ipairs(cam:GetChildren()) do print("  filho da camera: " .. c:GetFullName() .. " (" .. c.ClassName .. ")") end end
-    print("  Tool equipada: " .. (tool and tool:GetFullName() or "nenhuma"))
+    if cam then for _, c in ipairs(cam:GetChildren()) do print("  camera child: " .. c:GetFullName() .. " (" .. c.ClassName .. ")") end end
+    print("  Equipped Tool: " .. (tool and tool:GetFullName() or "none"))
+end
+function EX.weaponDump()
+    if AutoW.dumping then return end
+    AutoW.dumping = true
+    task.spawn(function()
+        AutoW.t0 = os.clock(); AutoW.n = 0
+        local tool = weaponContext()
+        pcall(dumpWeaponCandidates, tool)
+        AutoW.dumping = false
+        notify("Weapon", "dump printed to console")
+    end)
+end
+local function resetEntries(write)
+    if write then for _, e in ipairs(AutoW.list) do pcall(writeRef, e, e.orig) end end
+    AutoW.list = {}; AutoW.seen = setmetatable({}, {__mode = "k"}); AutoW.count = {}
 end
 local function restoreWeapon()
     for tbl, keys in pairs(Patched) do for k, v in pairs(keys) do pcall(function() tbl[k] = v.orig end) end end; Patched = {}
-    for _, e in ipairs(AutoW.list) do pcall(writeRef, e, e.orig) end; AutoW.list = {}
+    resetEntries(true)
 end
-local function weaponScanJob(tool, char)
-    AutoW.scans = AutoW.scans + 1; AutoW.t0 = os.clock()
+-- one-shot scan per (equipped weapon + enabled features); only modules the game already loaded; never requires unloaded modules
+local function weaponScanJob(tool, wname, vm)
+    AutoW.t0 = os.clock(); AutoW.n = 0; AutoW.nodes = 0
     AutoW.loadedSet, AutoW.byName = nil, nil
-    local loaded
-    if type(Cap.getloadedmodules) == "function" then
-        local ok, mods = pcall(Cap.getloadedmodules)
-        if ok and type(mods) == "table" then
-            loaded = mods; local s, bn = {}, {}
-            for _, m in ipairs(mods) do
-                if typeof(m) == "Instance" then s[m] = true; local k = m.Name:lower(); local l = bn[k]; if not l then l = {}; bn[k] = l end; l[#l + 1] = m end
-            end
-            AutoW.loadedSet, AutoW.byName = s, bn
-        end
+    if type(Cap.getloadedmodules) ~= "function" or type(Cap.require) ~= "function" then return false end
+    local ok, mods = pcall(Cap.getloadedmodules)
+    if not ok or type(mods) ~= "table" then return false end
+    local s, bn = {}, {}
+    for _, m in ipairs(mods) do
+        if typeof(m) == "Instance" then s[m] = true; local k = m.Name:lower(); local l = bn[k]; if not l then l = {}; bn[k] = l end; l[#l + 1] = m end
     end
-    local mask = ""; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then mask = mask .. r.pref end end
-    if AutoW.mask ~= mask then AutoW.mask = mask; AutoW.modDone = setmetatable({}, {__mode = "k"}) end
+    AutoW.loadedSet, AutoW.byName = s, bn
     local roots = {}
-    if tool then roots[#roots + 1] = tool; for _, m in ipairs(modulesNamed(tool.Name)) do roots[#roots + 1] = m end end
-    if char then roots[#roots + 1] = char end
-    local cam = Workspace.CurrentCamera
-    if cam then for _, c in ipairs(cam:GetChildren()) do if c:IsA("Model") then roots[#roots + 1] = c; for _, m in ipairs(modulesNamed(c.Name)) do roots[#roots + 1] = m end end end end
-    for _, r in ipairs(roots) do
-        if not UiMouse.alive then return end
-        pcall(scanInstance, r, 400); task.wait(); AutoW.t0 = os.clock()
-    end
-    if loaded and type(Cap.require) == "function" then
-        for i, m in ipairs(loaded) do
-            if not UiMouse.alive then return end
-            if typeof(m) == "Instance" and not AutoW.modDone[m] then
-                AutoW.modDone[m] = true
-                if weaponishModule(m) then
-                    local ok2, t = pcall(Cap.require, m)
-                    if ok2 and type(t) == "table" then pcall(scanTable, t, 0, {}, m:GetFullName()) end
-                end
-            end
-            if i % 40 == 0 and os.clock() - AutoW.t0 > 0.003 then task.wait(); AutoW.t0 = os.clock() end
+    if tool then roots[#roots + 1] = tool end
+    if vm then roots[#roots + 1] = vm end
+    for _, m in ipairs(bn[wname:lower()] or {}) do roots[#roots + 1] = m end
+    for _, r in ipairs(roots) do pcall(scanInstance, r, 300); if not UiMouse.alive then return true end end
+    local scanned = 0
+    for _, m in ipairs(mods) do
+        if typeof(m) == "Instance" and weaponishModule(m) then
+            scanned = scanned + 1; if scanned > 60 then break end
+            local ok2, t = pcall(Cap.require, m)
+            if ok2 and type(t) == "table" then pcall(scanTable, t, 0, {}, m:GetFullName()) end
         end
+        if not pace() then return true end
     end
-    for _, rule in ipairs(WEAPON_RULES) do
-        if get(rule.pref, false) and AutoW.scans >= 2 and not AutoW.found[rule.pref] and not AutoW.warned[rule.pref] then
-            AutoW.warned[rule.pref] = true; warn("[Eclypse] " .. rule.label .. ": nenhum campo correspondente achado (arma equipada: " .. (tool and tool.Name or "nenhuma/Tool") .. ")")
-            notify(rule.label, "nada encontrado - veja o console")
-            if not AutoW.dumped then AutoW.dumped = true; dumpWeaponCandidates(tool) end
-        end
-    end
+    return true
 end
 local function weaponPatchTick()
-    local W = GameConfig.Weapon; local char = LP.Character; local tool = char and char:FindFirstChildOfClass("Tool")
-    -- 1) caminho explícito (GameConfig.Weapon preenchido pelo usuário)
+    local W = GameConfig.Weapon; local tool, wname, vm = weaponContext()
+    -- 1) explicit path (GameConfig.Weapon filled in by the user)
     if W.ToolModule and tool and type(Cap.require) == "function" then
         local MAP = {NoRecoil = "wpn_recoil", NoSpread = "wpn_spread", InstantReload = "wpn_reload", InfiniteMagazine = "wpn_ammo", FireCooldown = "wpn_cd"}
         for field, pref in pairs(MAP) do
@@ -1257,21 +1270,39 @@ local function weaponPatchTick()
             end
         end
     end
-    -- 2) descoberta automática por nome de campo (em thread separada: nunca varre no frame do Heartbeat)
-    local anyOn = false; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then anyOn = true end end
-    if anyOn and not AutoW.busy and os.clock() - AutoW.last > 5 then
-        AutoW.busy = true
+    -- 2) automatic discovery: one scan per weapon/feature set, in a separate thread
+    local anyOn, mask = false, ""
+    for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then anyOn = true; mask = mask .. r.pref end end
+    local sig = wname and (wname .. "|" .. mask) or nil
+    if anyOn and sig and sig ~= AutoW.sig and not AutoW.busy then
+        AutoW.busy = true; AutoW.sig = sig
+        resetEntries(true)
         task.spawn(function()
-            local okc, errc = pcall(weaponScanJob, tool, char)
-            AutoW.last = os.clock(); AutoW.busy = false
-            if not okc and not AutoW.warned.job then AutoW.warned.job = true; warn("[Eclypse] varredura de armas: " .. tostring(errc)) end
+            local okc, res = pcall(weaponScanJob, tool, wname, vm)
+            AutoW.busy = false
+            if not okc then warn("[Eclypse] weapon scan: " .. tostring(res)); return end
+            if res == false then
+                if not AutoW.warned.cap then AutoW.warned.cap = true; warn("[Eclypse] weapon auto-scan needs getloadedmodules + require (not available in this executor)"); notify("Weapon", "executor lacks getloadedmodules") end
+                return
+            end
+            for _, rule in ipairs(WEAPON_RULES) do
+                local key = sig .. rule.pref
+                if get(rule.pref, false) and (AutoW.count[rule.pref] or 0) == 0 and not AutoW.warned[key] then
+                    AutoW.warned[key] = true
+                    warn("[Eclypse] " .. rule.label .. ": no matching field (weapon: " .. wname .. ")")
+                    notify(rule.label, "no field found - use Dump Weapon Fields")
+                end
+            end
         end)
     end
     for i = #AutoW.list, 1, -1 do
         local e = AutoW.list[i]; local on = get(e.rule.pref, false)
         local ok = pcall(function() local want = on and e.rule.value(e.orig) or e.orig; if readRef(e) ~= want then writeRef(e, want) end end)
-        if on and ok and not e.logged then e.logged = true; AutoW.nlog = (AutoW.nlog or 0) + 1; if AutoW.nlog <= 15 then print("[Eclypse] " .. e.rule.label .. ": " .. e.path .. "  " .. tostring(e.orig) .. " -> " .. tostring(e.rule.value(e.orig)) .. "  (se nada mudar, troque de arma 1/2/3: o jogo pode copiar o valor ao equipar)") end end
-        if (not ok) or (not on) then table.remove(AutoW.list, i); local sn = AutoW.seen[e.ref]; if sn then sn[e.key] = nil end end
+        if on and ok and not e.logged then e.logged = true; AutoW.nlog = AutoW.nlog + 1; if AutoW.nlog <= 15 then print("[Eclypse] " .. e.rule.label .. ": " .. e.path .. "  " .. tostring(e.orig) .. " -> " .. tostring(e.rule.value(e.orig)) .. "  (if nothing changes, switch weapon: the game may copy the value on equip)") end end
+        if (not ok) or (not on) then
+            table.remove(AutoW.list, i); local sn = AutoW.seen[e.ref]; if sn then sn[e.key] = nil end
+            AutoW.count[e.rule.pref] = math.max((AutoW.count[e.rule.pref] or 1) - 1, 0)
+        end
     end
 end
 
@@ -1697,29 +1728,49 @@ do
         end
         return LP.Character
     end
+    local function botClone(src)
+        local flipped = {}
+        for _, d in ipairs(src:GetDescendants()) do if not d.Archivable then d.Archivable = true; flipped[#flipped + 1] = d end end
+        local was = src.Archivable; src.Archivable = true
+        local ok, c = pcall(function() return src:Clone() end)
+        src.Archivable = was
+        for _, d in ipairs(flipped) do d.Archivable = false end
+        return ok and c or nil
+    end
+    local function botFromDescription(userId, rig)
+        local ok, m = pcall(function() return Players:CreateHumanoidModelFromDescription(Players:GetHumanoidDescriptionFromUserId(userId), rig) end)
+        return ok and m or nil
+    end
     function EX.botSpawn()
-        local me = LP.Character; local hrp = me and me:FindFirstChild("HumanoidRootPart")
-        if not hrp then notify("Bots", "no character yet"); return end
-        local n = math.clamp(getNum("bot_count", 3), 1, 10)
-        if #Bots.list + n > 25 then n = 25 - #Bots.list end
-        if n <= 0 then notify("Bots", "limit of 25 reached"); return end
-        local spawned = 0
-        for i = 1, n do
-            local src = botSource()
-            if src then
-                local was = src.Archivable; src.Archivable = true
-                local ok, clone = pcall(function() return src:Clone() end)
-                src.Archivable = was
-                if ok and clone then
+        task.spawn(safe, "botSpawn", function()
+            local me = LP.Character; local hrp = me and me:FindFirstChild("HumanoidRootPart")
+            if not hrp then notify("Bots", "no character yet"); return end
+            local n = math.min(math.clamp(getNum("bot_count", 3), 1, 10), 25 - #Bots.list)
+            if n <= 0 then notify("Bots", "limit of 25 reached"); return end
+            local start, spawned = #Bots.list, 0
+            for i = 1, n do
+                local src = botSource()
+                local clone = src and botClone(src)
+                if not clone then
+                    local plr = (src and Players:GetPlayerFromCharacter(src)) or LP
+                    local h0 = src and src:FindFirstChildOfClass("Humanoid")
+                    clone = botFromDescription(plr.UserId, h0 and h0.RigType or Enum.HumanoidRigType.R15)
+                    if not clone then warn("[Eclypse] bots: Clone() and CreateHumanoidModelFromDescription both failed") end
+                end
+                if clone then
                     for _, d in ipairs(clone:GetDescendants()) do
-                        if d:IsA("LuaSourceContainer") then d:Destroy() elseif d:IsA("BasePart") then d.CanCollide = false end
+                        if d:IsA("LuaSourceContainer") then d:Destroy() elseif d:IsA("BasePart") then d.CanCollide = false; d.Anchored = false end
                     end
                     local hum = clone:FindFirstChildOfClass("Humanoid"); local chrp = clone:FindFirstChild("HumanoidRootPart")
                     if hum and chrp then
                         local idx = #Bots.list + 1
+                        clone:SetAttribute("EclypseBot", true)
                         clone.Name = "EclypseBot" .. idx; hum.DisplayName = "Bot " .. idx; hum.WalkSpeed = getNum("bot_speed", 16)
-                        clone.Parent = Workspace
+                        hum.BreakJointsOnDeath = false; hum.PlatformStand = false; hum.Sit = false
+                        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false) end)
+                        if hum.Health <= 0 then hum.Health = math.max(hum.MaxHealth, 100) end
                         clone:PivotTo(hrp.CFrame * CFrame.new((i - (n + 1) / 2) * 3, 0, 4))
+                        clone.Parent = Workspace
                         local animator = hum:FindFirstChildOfClass("Animator") or Instance.new("Animator", hum)
                         local ids = ANIM[hum.RigType == Enum.HumanoidRigType.R15 and "R15" or "R6"]
                         local tracks = {}
@@ -1734,8 +1785,12 @@ do
                     else clone:Destroy() end
                 end
             end
-        end
-        notify("Bots", "Spawned " .. spawned .. " bots")
+            task.wait(0.5)
+            local lost = spawned - (#Bots.list - start)
+            if lost > 0 then warn("[Eclypse] bots: the game removed " .. lost .. " bot model(s) from Workspace right after spawn") end
+            notify("Bots", spawned > 0 and ("Spawned " .. spawned .. " bots" .. (lost > 0 and (" (" .. lost .. " removed by game)") or "")) or "could not create bots - see console")
+        end)
+    end
     end
     function EX.botBring()
         local me = LP.Character; local hrp = me and me:FindFirstChild("HumanoidRootPart"); if not hrp then return end
@@ -1752,15 +1807,27 @@ do
             if not b.model.Parent or not b.hrp.Parent then table.remove(Bots.list, i)
             else
                 b.hum.WalkSpeed = spd
+                if b.hum.Health <= 0 then b.hum.Health = math.max(b.hum.MaxHealth, 100) end
                 local target
                 if mode == "Follow Me" then local a = (i / n) * math.pi * 2; target = hrp.Position + Vector3.new(math.cos(a), 0, math.sin(a)) * dist
                 elseif mode == "Orbit Me" then local a = t * 0.9 + (i / n) * math.pi * 2; target = hrp.Position + Vector3.new(math.cos(a), 0, math.sin(a)) * orb
                 elseif mode == "Line Up" then target = (hrp.CFrame * CFrame.new((i - (n + 1) / 2) * 3.5, 0, dist)).Position end
                 if (b.hrp.Position - hrp.Position).Magnitude > 120 then b.model:PivotTo(hrp.CFrame * CFrame.new(0, 0, 5)) end
-                local moving = false
+                local moving, flat = false, nil
                 if target then
-                    local flat = (target - b.hrp.Position) * Vector3.new(1, 0, 1)
+                    flat = (target - b.hrp.Position) * Vector3.new(1, 0, 1)
                     if flat.Magnitude > 2 then b.hum:MoveTo(target); moving = true end
+                end
+                if moving then
+                    if not b.chk or t - b.chk > 0.5 then
+                        if b.chkPos and (b.hrp.Position - b.chkPos).Magnitude < 0.3 then b.fallback = true end
+                        b.chk = t; b.chkPos = b.hrp.Position
+                    end
+                    if b.fallback then
+                        local step = math.min(flat.Magnitude, spd * 0.05)
+                        local np = b.hrp.Position + flat.Unit * step
+                        b.hrp.CFrame = CFrame.lookAt(np, np + flat.Unit)
+                    end
                 end
                 if b.tracks.walk then
                     if moving and not b.moving then b.tracks.walk:Play(0.15) elseif (not moving) and b.moving then b.tracks.walk:Stop(0.15) end
