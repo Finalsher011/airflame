@@ -844,7 +844,7 @@ local function PAL(bg, panel, card, track, stroke, text, sub, accent)
 end
 EX.Themes = {
     {name = "Eclypse", pal = PAL({0, 0, 0}, {10, 10, 10}, {18, 18, 18}, {32, 32, 32}, {44, 44, 44}, {255, 255, 255}, {150, 150, 160}, {255, 40, 60}),
-        fx = {border = "pulse", glow = {pos = "bottom", col = C3(255, 40, 60), base = 0.72, amp = 0.08, speed = 1.4}, moon = {col = C3(255, 40, 60), size = 42, x = 0.88, y = 0.15, speed = 0.6},,
+        fx = {border = "pulse", glow = {pos = "bottom", col = C3(255, 40, 60), base = 0.72, amp = 0.08, speed = 1.4}, moon = {col = C3(255, 40, 60), size = 42, x = 0.88, y = 0.15, speed = 0.6},
             em = {{n = 14, shape = "circle", size = {2, 4}, col = {C3(255, 60, 80), C3(255, 130, 140)}, tr = {0.45, 0.8}, vx = {-0.01, 0.01}, vy = {-0.12, -0.04}, twinkle = 1.6}}}},
     {name = "Overworld", pal = PAL({150, 190, 240}, {196, 128, 86}, {252, 246, 230}, {222, 208, 178}, {70, 45, 30}, {48, 32, 26}, {110, 86, 72}, {222, 52, 48}),
         fx = {strip = {col = C3(96, 186, 72), edge = C3(70, 140, 52)}, orb = {col = C3(255, 214, 90), size = 54, x = 0.88, y = 0.13, speed = 1.3},
@@ -859,7 +859,7 @@ EX.Themes = {
         fx = {sweep = true,
             em = {{n = 12, shape = "circle", size = {10, 26}, col = {C3(120, 170, 255), C3(255, 170, 210), C3(160, 230, 200)}, tr = {0.8, 0.92}, vx = {-0.006, 0.006}, vy = {-0.03, -0.012}, sway = {0.01, 0.8}}}}},
     {name = "Dark", pal = PAL({10, 12, 18}, {16, 19, 28}, {24, 28, 40}, {40, 46, 62}, {52, 58, 78}, {240, 244, 255}, {140, 150, 175}, {110, 130, 255}),
-        fx = {border = "pulse", glow = {pos = "top", col = C3(110, 130, 255), base = 0.8, amp = 0.08, speed = 0.8}, moon = {col = C3(200, 215, 255), size = 40, x = 0.1, y = 0.13, speed = 0.5},,
+        fx = {border = "pulse", glow = {pos = "top", col = C3(110, 130, 255), base = 0.8, amp = 0.08, speed = 0.8}, moon = {col = C3(200, 215, 255), size = 40, x = 0.1, y = 0.13, speed = 0.5},
             em = {{n = 26, shape = "circle", size = {1, 3}, col = {C3(255, 255, 255), C3(170, 190, 255)}, tr = {0.2, 0.7}, vx = {-0.004, 0.004}, vy = {-0.006, 0.006}, twinkle = 2.5}}}},
     {name = "Underground", pal = PAL({14, 22, 30}, {20, 34, 44}, {28, 46, 58}, {44, 70, 86}, {60, 96, 112}, {220, 245, 250}, {130, 170, 184}, {60, 220, 200}),
         fx = {glow = {pos = "bottom", col = C3(40, 200, 190), base = 0.74, amp = 0.06, speed = 1.0},
