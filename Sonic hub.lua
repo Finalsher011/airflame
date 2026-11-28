@@ -1,4 +1,4 @@
--- Eclypse V34 (base: V33; removido o hook de __newindex do UiMouse que causava "attempt to call a nil value") | clickFire agora tenta Tool:Activate antes do clique falso, clique falso mirado no centro da tela (nao mais 0,0), log de qual caminho disparou o tiro
+-- Eclypse V35 (base: V33; sem mexer na UI: removido hook de __newindex que dava "attempt to call a nil value", gate da mira relaxado, entidades genericas, lineClear sem falso bloqueio, aimStep com fallback de camera, clique via VirtualInputManager, scan de armas via getgc, diagnostico GameConfig.Debug) | base V33 | clickFire agora tenta Tool:Activate antes do clique falso, clique falso mirado no centro da tela (nao mais 0,0), log de qual caminho disparou o tiro
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -339,9 +339,9 @@ do
         if mb ~= Enum.MouseBehavior.Default then if not UiMouse.hooked then UiMouse.guess = mb end; UserInputService.MouseBehavior = Enum.MouseBehavior.Default end
         if not UserInputService.MouseIconEnabled then UserInputService.MouseIconEnabled = true end
     end
-    -- V34: o hook de __newindex em `game` foi removido. Ele rodava no carregamento e, se o executor o instalava antes de devolver o
-    -- original (ou devolvia nil), qualquer escrita de propriedade do jogo chamava `old` nil ("attempt to call a nil value").
-    -- Sem hook, enforce() abaixo já registra em UiMouse.guess o MouseBehavior que o jogo escreveu, e é isso que se restaura ao fechar.
+    -- V35: hook de __newindex em `game` removido. Rodava no carregamento; se o executor o ativava antes de devolver o original (ou devolvia nil),
+    -- toda escrita de propriedade do jogo chamava `old` nil ("attempt to call a nil value"). enforce() ja guarda em UiMouse.guess o MouseBehavior
+    -- que o jogo escreveu, e e isso que se restaura ao fechar o menu.
     function UiMouse.setOpen(open)
         open = open and true or false
         if open == UiMouse.open then return end
@@ -936,7 +936,7 @@ local function guard(name, fn) return function(...)
     if not ok and not Warned[name] then Warned[name] = true; warn("[Eclypse] " .. name .. ": " .. tostring(err)) end
 end end
 local Cap = {mousemoverel = mousemoverel, mouse1click = mouse1click, hookmetamethod = hookmetamethod, newcclosure = newcclosure, checkcaller = checkcaller, getnamecallmethod = getnamecallmethod, setnamecallmethod = setnamecallmethod, getloadedmodules = getloadedmodules, require = require}
-local GameConfig = {Build = "UNSET", Debug = true, Probe = true, Weapon = {ToolModule = nil, Fields = {NoRecoil = nil, NoSpread = nil, InstantReload = nil, InfiniteMagazine = nil, FireCooldown = nil}}, SpectateProbe = nil}
+local GameConfig = {Build = "UNSET", MatchGate = nil, Debug = true, Probe = true, Weapon = {ToolModule = nil, Fields = {NoRecoil = nil, NoSpread = nil, InstantReload = nil, InfiniteMagazine = nil, FireCooldown = nil}}, SpectateProbe = nil}
 
 -- Roteador universal: identifica os dois jogos e aplica somente metadados/perfis seguros de interface.
 -- Nao altera visibilidade de jogadores, mira, hitbox, armas, rede ou mecanismos anti-cheat.
@@ -1001,6 +1001,12 @@ local function clickFire()
         if ok then logFirePath("mouse1click"); return end
     end
     if activateTool() then return end
+    -- V35: VirtualInputManager (clique no centro) antes do VirtualUser, que muitos jogos com mouse travado ignoram.
+    local okV = pcall(function()
+        local vim = game:GetService("VirtualInputManager"); local vsz = Workspace.CurrentCamera.ViewportSize
+        vim:SendMouseButtonEvent(vsz.X / 2, vsz.Y / 2, 0, true, game, 0); vim:SendMouseButtonEvent(vsz.X / 2, vsz.Y / 2, 0, false, game, 0)
+    end)
+    if okV then logFirePath("VirtualInputManager (centro da tela)"); return end
     pcall(function()
         local vp = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(800, 450)
         VirtualUser:CaptureController()
@@ -1044,8 +1050,49 @@ local function initNPCs()
         end
     end)
 end
-local function isEnemyPlayer(plr) if plr.Neutral or plr.Team == nil or LP.Team == nil then return true end; return plr.Team ~= LP.Team end
-local function buildEntity(char, plr) local hum = char:FindFirstChildOfClass("Humanoid"); local hrp = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("Head"); if not hum or not hrp or hum.Health <= 0 then return nil end; return {char = char, hum = hum, hrp = hrp, plr = plr, name = plr and plr.Name or char.Name} end
+local function isEnemyPlayer(plr)
+    if plr.Neutral or plr.Team == nil or LP.Team == nil then
+        -- Assumido: alguns jogos guardam o time num atributo "Team" em vez de Player.Team.
+        local a, b = plr:GetAttribute("Team"), LP:GetAttribute("Team")
+        if a ~= nil and b ~= nil then return a ~= b end
+        return true
+    end
+    return plr.Team ~= LP.Team
+end
+-- Resolvedores genericos (ASSUMIDO: estrutura comum de personagem do Roblox). Sem novos locals de topo: ficam em EX (limite de 200 locais).
+EX.charBy, EX.charMiss = setmetatable({}, {__mode = "k"}), setmetatable({}, {__mode = "k"})
+EX.charOf = function(plr)
+    local c = plr.Character
+    if c and c.Parent then return c end
+    local cached = EX.charBy[plr]
+    if cached and cached.Parent then return cached end
+    local now = os.clock()
+    if EX.charMiss[plr] and now - EX.charMiss[plr] < 2 then return nil end
+    EX.charMiss[plr] = now
+    -- Jogos que nao usam Player.Character: procura um Model com o nome do jogador (no maximo a cada 2 s).
+    local m = Workspace:FindFirstChild(plr.Name, true)
+    if m and m:IsA("Model") then EX.charBy[plr] = m; return m end
+    return nil
+end
+EX.rootOf = function(char)
+    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+        or char:FindFirstChild("Head") or char:FindFirstChildWhichIsA("BasePart")
+end
+EX.healthOf = function(char, hum)
+    if hum then return hum end
+    local h, mh = char:GetAttribute("Health"), char:GetAttribute("MaxHealth")
+    if type(h) ~= "number" then local v = char:FindFirstChild("Health"); if v and v:IsA("ValueBase") and type(v.Value) == "number" then h = v.Value end end
+    local hp = (type(h) == "number") and h or 100
+    return {Health = hp, MaxHealth = (type(mh) == "number") and mh or math.max(hp, 100)}
+end
+local function buildEntity(char, plr)
+    local hrp = EX.rootOf(char); if not hrp then return nil end
+    local realHum = char:FindFirstChildOfClass("Humanoid")
+    -- V35: personagem sem Humanoid (jogos com modelo proprio) vira entidade com vida lida de atributo/valor, em vez de ser ignorado.
+    local hum = EX.healthOf(char, realHum)
+    if hum.Health <= 0 then return nil end
+    return {char = char, hum = hum, hrp = hrp, plr = plr, name = plr and plr.Name or char.Name, realHumanoid = realHum ~= nil}
+end
 -- Heurística (assumida): NPC com atributo/valor "Team"/"TeamName" igual ao nome do meu time é aliado; sem informação = inimigo.
 local function npcEnemy(m)
     local mine = LP.Team; if not mine then return true end
@@ -1059,7 +1106,7 @@ local EntCache = {frame = -1, list = {}, byChar = {}}
 local function entities()
     local _t = os.clock(); if EntCache.t and _t - EntCache.t < 0.033 then return EntCache.list end; EntCache.t = _t
     local list, by = {}, {}
-    for _, plr in ipairs(Players:GetPlayers()) do if plr ~= LP and plr.Character then local e = buildEntity(plr.Character, plr); if e then e.enemy = isEnemyPlayer(plr); list[#list + 1] = e; by[e.char] = e end end end
+    for _, plr in ipairs(Players:GetPlayers()) do if plr ~= LP then local pc = EX.charOf(plr); if pc then local e = buildEntity(pc, plr); if e then e.enemy = isEnemyPlayer(plr); list[#list + 1] = e; by[e.char] = e end end end end
     if NPCInit then for m in pairs(NPCs) do if m.Parent and not Players:GetPlayerFromCharacter(m) then local e = buildEntity(m, nil); if e then e.enemy = npcEnemy(m); e.npc = true; list[#list + 1] = e; by[m] = e end else NPCs[m] = nil end end end
     EntCache.frame = FrameNo; EntCache.list = list; EntCache.byChar = by; return list
 end
@@ -1070,17 +1117,29 @@ local function velocityOf(char, windowMs) local t = Track[char]; if not t or #t 
 
 local RayP = RaycastParams.new(); RayP.FilterType = Enum.RaycastFilterType.Exclude
 local function setFilter(extra) local f = {}; if LP.Character then f[#f + 1] = LP.Character end; if extra then f[#f + 1] = extra end; RayP.FilterDescendantsInstances = f end
-local WallP = RaycastParams.new(); WallP.FilterType = Enum.RaycastFilterType.Exclude; WallP.RespectCanCollide = true
+local WallP = RaycastParams.new(); WallP.FilterType = Enum.RaycastFilterType.Exclude; WallP.RespectCanCollide = false
 EX.visCache = setmetatable({}, {__mode = "k"})
 local function lineClear(cam, pos, char)
     local now = os.clock(); local c = char and EX.visCache[char]
     if c and now - c.t < 0.1 then return c.v end
-    local f = {}; if LP.Character then f[#f + 1] = LP.Character end; if char then f[#f + 1] = char end; WallP.FilterDescendantsInstances = f
-    local v = Workspace:Raycast(cam.CFrame.Position, pos - cam.CFrame.Position, WallP) == nil
+    -- V35: ignora pecas invisiveis (Transparency >= 0.9) e outros personagens (companheiros nao bloqueiam); ate 6 raios.
+    local origin = cam.CFrame.Position; local dir = pos - origin
+    local f = {}; if LP.Character then f[#f + 1] = LP.Character end; if char then f[#f + 1] = char end
+    local v = false
+    for _ = 1, 6 do
+        WallP.FilterDescendantsInstances = f
+        local r = Workspace:Raycast(origin, dir, WallP)
+        if not r then v = true; break end
+        local inst = r.Instance
+        local m, owned = inst, false
+        while m and m ~= Workspace do if EntCache.byChar[m] then owned = true; break end; m = m.Parent end
+        if inst.Transparency < 0.9 and not owned then v = false; break end
+        f[#f + 1] = inst
+    end
     if char then EX.visCache[char] = {t = now, v = v} end
     return v
 end
-local function getPart(char, which) if which == "Head" then return char:FindFirstChild("Head") elseif which == "Torso" then return char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") end; return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") end
+local function getPart(char, which) if which == "Head" then return char:FindFirstChild("Head") elseif which == "Torso" then return char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") end; return EX.rootOf(char) end
 local Jitter = setmetatable({}, {__mode = "k"})
 local function jitterFor(char, size) local j, now = Jitter[char], os.clock(); if not j or now - j.t > 0.25 then j = {t = now, v = Vector3.new(math.random() * 2 - 1, math.random() * 2 - 1, math.random() * 2 - 1) * size}; Jitter[char] = j end; return j.v end
 
@@ -1149,14 +1208,27 @@ function EX.pickTargetCached(key, o)
     local r = pickTarget(o); EX.pickCache[key] = {t = now, r = r or false}; return r
 end
 local function stepAlpha(a60, dt) return 1 - (1 - math.clamp(a60, 0, 1)) ^ (math.clamp(dt, 0, 0.1) * 60) end
+-- V35: controle em malha fechada. Usa mousemoverel enquanto o erro em pixels diminui; se por ~25 quadros nao diminui (ou o executor
+-- nao tem mousemoverel), passa a mover a camera direto.
+EX.AimCtl = {prevErr = nil, bad = 0, forceCam = false}
 local function aimStep(target, alpha, dt)
     local cam = Workspace.CurrentCamera
-    if not cam or type(Cap.mousemoverel) ~= "function" then return end
+    if not cam then return end
+    local a = math.clamp(alpha, 0, 1)
+    local C = EX.AimCtl
+    if type(Cap.mousemoverel) ~= "function" or C.forceCam then
+        cam.CFrame = cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position, target.pos), a)
+        return
+    end
     local v, on = cam:WorldToViewportPoint(target.pos)
     if not on then return end
     local vs = cam.ViewportSize
-    local dx = (v.X - vs.X * 0.5) * math.clamp(alpha, 0, 1)
-    local dy = (v.Y - vs.Y * 0.5) * math.clamp(alpha, 0, 1)
+    local ex, ey = v.X - vs.X * 0.5, v.Y - vs.Y * 0.5
+    local err = math.sqrt(ex * ex + ey * ey)
+    if C.prevErr and err > 4 and err > C.prevErr - 0.5 then C.bad = C.bad + 1 else C.bad = math.max(C.bad - 1, 0) end
+    C.prevErr = err
+    if C.bad >= 25 then C.forceCam = true; print("[Eclypse] mousemoverel nao aproxima a mira neste jogo; usando a camera direto.") end
+    local dx, dy = ex * a, ey * a
     local frameScale = math.clamp((dt or 1/60) * 60, 0, 1.5)
     local mag = math.sqrt(dx * dx + dy * dy)
     local maxStep = 10 * frameScale
@@ -1466,6 +1538,26 @@ local function weaponScanJob(tool, char)
                 end
             end
             if i % 40 == 0 and os.clock() - AutoW.t0 > 0.003 then task.wait(); AutoW.t0 = os.clock() end
+        end
+    end
+    -- V35: executores sem getloadedmodules: varre tabelas vivas (getgc) que parecem config de arma (>= 2 marcadores) e passa pelo mesmo scanTable/regras.
+    if type(getgc) == "function" and AutoW.gcSig ~= AutoW.sig then
+        AutoW.gcSig = AutoW.sig
+        local okg, objs = pcall(getgc, true)
+        if okg and type(objs) == "table" then
+            local marks, seenT = {"damage", "ammo", "recoil", "spread", "reload", "firerate", "cooldown", "magazine", "bullet", "range"}, {}
+            seenT[Prefs] = true
+            for i = 1, math.min(#objs, 80000) do
+                if not UiMouse.alive then return end
+                local o = objs[i]
+                if type(o) == "table" and getmetatable(o) == nil and not seenT[o] then
+                    local hits, n = {}, 0
+                    pcall(function() for k in pairs(o) do n = n + 1; if n > 120 then break end; if type(k) == "string" then local lk = k:lower(); for _, m in ipairs(marks) do if lk:find(m, 1, true) then hits[m] = true end end end end end)
+                    local c = 0; for _ in pairs(hits) do c = c + 1 end
+                    if c >= 2 then pcall(scanTable, o, 0, seenT, "gc") end
+                end
+                if i % 4000 == 0 then task.wait(); AutoW.t0 = os.clock() end
+            end
         end
     end
     for _, rule in ipairs(WEAPON_RULES) do
@@ -2120,17 +2212,61 @@ local function rapidGap() if get("wpn_cd", false) then return math.max(getNum("w
 local gRapid = guard("rapid", function() if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then return end; if UserInputService:GetFocusedTextBox() or GUI.Enabled then return end; local now = os.clock(); if get("wpn_rapid") and now - rapidLast > rapidGap() then rapidLast = now; clickFire() end; if get("trc_on") and now - bulletLast > 0.1 then bulletLast = now; spawnBulletTracer() end end)
 
 -- Mira só roda em partida: menu fechado, sem caixa de texto, personagem vivo e mouse travado no centro (cursor livre = lobby/menu do jogo)
+-- V35: antes a mira so era liberada com Humanoid vivo E (mouse travado OU camera a < 2 studs da cabeca). Em jogos com cursor proprio, viewmodel
+-- ou personagem sem Humanoid isso bloqueava aimbot/silent/trigger/rage por completo. Agora: menu fechado + sem caixa de texto + personagem vivo.
+-- O gate antigo continua disponivel com GameConfig.MatchGate = "strict".
+EX.AimGate = {why = "ok"}
 local function aimAllowed()
-    if GUI.Enabled or Confirm.Visible then return false end
-    if UserInputService:GetFocusedTextBox() then return false end
-    local c = LP.Character; local h = c and c:FindFirstChildOfClass("Humanoid")
-    if not h or h.Health <= 0 then return false end
-    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then return true end
-    local cam, head = Workspace.CurrentCamera, c:FindFirstChild("Head")
-    return cam ~= nil and head ~= nil and (cam.CFrame.Position - head.Position).Magnitude < 2
+    local G = EX.AimGate
+    if GUI.Enabled or Confirm.Visible then G.why = "menu aberto"; return false end
+    if UserInputService:GetFocusedTextBox() then G.why = "caixa de texto"; return false end
+    local c = LP.Character
+    if not c then G.why = "sem personagem"; return false end
+    local h = c:FindFirstChildOfClass("Humanoid")
+    if h and h.Health <= 0 then G.why = "morto"; return false end
+    if GameConfig.MatchGate == "strict" then
+        if not h then G.why = "strict: sem Humanoid"; return false end
+        if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+            local cam, head = Workspace.CurrentCamera, c:FindFirstChild("Head")
+            if not (cam ~= nil and head ~= nil and (cam.CFrame.Position - head.Position).Magnitude < 2) then G.why = "strict: mouse livre e camera longe da cabeca"; return false end
+        end
+    end
+    G.why = "ok"; return true
 end
+-- Diagnostico (GameConfig.Debug): a cada 3 s mostra por que aimbot/trigger/silent nao acham alvo.
+EX.dbgLast = 0
+EX.debugTick = function(cam, dt)
+    if not GameConfig.Debug then return end
+    local now = os.clock(); if now - EX.dbgLast < 3 then return end; EX.dbgLast = now
+    local others, withChar, withHum, withRoot = 0, 0, 0, 0
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LP then
+            others = others + 1
+            local c = EX.charOf(plr)
+            if c then withChar = withChar + 1; if c:FindFirstChildOfClass("Humanoid") then withHum = withHum + 1 end; if EX.rootOf(c) then withRoot = withRoot + 1 end end
+        end
+    end
+    local list = entities(); local enemies = 0
+    for _, e in ipairs(list) do if e.enemy then enemies = enemies + 1 end end
+    print(string.format("[Eclypse debug] outros=%d comPersonagem=%d comHumanoid=%d comRaiz=%d | entidades=%d inimigos=%d | meuChar=%s", others, withChar, withHum, withRoot, #list, enemies, tostring(LP.Character ~= nil)))
+    print(string.format("[Eclypse debug] mira liberada=%s (%s) | aim on=%s bind=%s | silent on=%s bind=%s hook=%s | trigger on=%s bind=%s | rage on=%s bind=%s | pausado=%s",
+        tostring(aimAllowed()), EX.AimGate.why, tostring(get("aim_on")), tostring(bindActive("aim_key")), tostring(get("sil_on")), tostring(bindActive("sil_key")), tostring(Silent.hooked),
+        tostring(get("trg_on")), tostring(bindActive("trg_key")), tostring(get("rage_on")), tostring(bindActive("rage_key")), tostring(HB.paused)))
+    print(string.format("[Eclypse debug] mousemoverel=%s mouse1click=%s getgc=%s require=%s | MouseBehavior=%s | aim usa camera=%s",
+        tostring(type(Cap.mousemoverel) == "function"), tostring(type(Cap.mouse1click) == "function"), tostring(type(getgc) == "function"), tostring(type(Cap.require) == "function"),
+        tostring(UserInputService.MouseBehavior), tostring(EX.AimCtl.forceCam)))
+    local best, bd
+    for _, e in ipairs(list) do local d = (e.hrp.Position - cam.CFrame.Position).Magnitude; if not bd or d < bd then best, bd = e, d end end
+    if best then
+        local v, on = cam:WorldToViewportPoint(best.hrp.Position); local vs = cam.ViewportSize
+        local px = (Vector2.new(v.X, v.Y) - Vector2.new(vs.X / 2, vs.Y / 2)).Magnitude
+        print(string.format("[Eclypse debug] mais perto: %s | studs=%.0f naTela=%s distCentro=%.0fpx | linhaLivre=%s | inimigo=%s npc=%s", best.name, bd, tostring(on), px,
+            tostring(lineClear(cam, best.hrp.Position, best.char)), tostring(best.enemy), tostring(best.npc == true)))
+    else print("[Eclypse debug] nenhuma entidade valida (nenhum outro jogador com personagem/raiz e vida > 0)") end
+end
+EX.gDbg = guard("debug", EX.debugTick)
 pcall(function() RunService:UnbindFromRenderStep("DrxMain") end)
-RunService:BindToRenderStep("DrxMain", Enum.RenderPriority.Camera.Value + 1, function(dt) FrameNo = FrameNo + 1; fpsAvg = fpsAvg + (1 / math.max(dt, 1e-4) - fpsAvg) * 0.05; gPoll(); local cam = Workspace.CurrentCamera; if not cam then return end; if get("aim_on") or get("sil_on") or get("rage_on") or get("trg_on") then gNPC() end; if get("aim_on") or get("sil_on") or get("rage_on") or get("trg_on") or get("ra_kill") or get("esp_path") then gTrack() end; gCircles(cam); if HB.paused or not aimAllowed() then Silent.target = nil; Silent.shooting = false else gAim(cam, dt); gSilent(cam, dt); gRage(cam, dt); gKill(cam, dt); gTrig(cam, dt) end; gESP(cam, dt); gRapid(); if os.clock() - EX.profT > 15 then EX.profReport() end end)
+RunService:BindToRenderStep("DrxMain", Enum.RenderPriority.Camera.Value + 1, function(dt) FrameNo = FrameNo + 1; fpsAvg = fpsAvg + (1 / math.max(dt, 1e-4) - fpsAvg) * 0.05; gPoll(); local cam = Workspace.CurrentCamera; if not cam then return end; if get("aim_on") or get("sil_on") or get("rage_on") or get("trg_on") then gNPC() end; if get("aim_on") or get("sil_on") or get("rage_on") or get("trg_on") or get("ra_kill") or get("esp_path") then gTrack() end; gCircles(cam); if HB.paused or not aimAllowed() then Silent.target = nil; Silent.shooting = false else gAim(cam, dt); gSilent(cam, dt); gRage(cam, dt); gKill(cam, dt); gTrig(cam, dt) end; gESP(cam, dt); gRapid(); EX.gDbg(cam, dt); if os.clock() - EX.profT > 15 then EX.profReport() end end)
 Conns[#Conns + 1] = RunService.Heartbeat:Connect(function(dt) gHB(dt) end)
 -- Sem simulacao de entrada AFK via VirtualUser; o Roblox controla a inatividade normalmente.
 
@@ -2151,6 +2287,12 @@ doUnload = cleanup
 GUI.Destroying:Connect(cleanup)
 UiMouse.setOpen(GUI.Enabled)
 Booted = true
+do
+    local missing = {}
+    for _, n in ipairs({"mousemoverel", "mouse1click", "hookmetamethod", "newcclosure", "checkcaller", "getnamecallmethod", "require", "getloadedmodules"}) do if type(Cap[n]) ~= "function" then missing[#missing + 1] = n end end
+    if type(getgc) ~= "function" then missing[#missing + 1] = "getgc" end
+    print("[Eclypse V35] ausentes no executor: " .. ((#missing > 0) and table.concat(missing, ", ") or "nenhum"))
+end
 print("[Eclypse V30] pronto | silent-hook=" .. (SilentHooks.done and tostring(Silent.hooked) or "instala ao ligar o Silent") .. " | Build=" .. GameConfig.Build)
 do
     local L = EX.Load
