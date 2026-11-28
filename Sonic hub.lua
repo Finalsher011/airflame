@@ -484,9 +484,12 @@ end
 local Body = new("Frame", {Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 1, -50), BackgroundTransparency = 1}, Main)
 local Sidebar = new("Frame", {Position = UDim2.fromOffset(15, 15), Size = UDim2.fromOffset(170, 495), BackgroundColor3 = Theme.panel}, Body)
 corner(Sidebar, 10); outline(Sidebar, 1, Theme.stroke)
-local NavList = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 0, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new()}, Sidebar)
+local NavList = new("ScrollingFrame", {Size = UDim2.new(1, 0, 1, -48), BackgroundTransparency = 1, ScrollBarThickness = 0, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new()}, Sidebar)
 new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, NavList)
 new("UIPadding", {PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)}, NavList)
+local ThemeNavFooter = new("Frame", {Name = "ThemeNavFooter", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0), Size = UDim2.new(1, 0, 0, 44), BackgroundColor3 = Theme.panel, BackgroundTransparency = 0.08, BorderSizePixel = 0, ClipsDescendants = true}, Sidebar)
+local ThemeNavFooterLine = new("Frame", {Name = "FooterAccent", Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = Theme.accent, BorderSizePixel = 0}, ThemeNavFooter)
+local ThemeNavFooterTitle = label(ThemeNavFooter, {Name = "FooterLabel", Size = UDim2.new(1, -12, 0, 12), Position = UDim2.fromOffset(8, 5), Text = "ECLYPSE  •  THEMES", TextSize = 8, Font = Enum.Font.GothamBold, TextColor3 = Theme.sub, TextXAlignment = Enum.TextXAlignment.Center})
 local ContentArea = new("Frame", {Position = UDim2.fromOffset(200, 15), Size = UDim2.fromOffset(605, 495), BackgroundTransparency = 1}, Body)
 local PageContainer = new("Frame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1}, ContentArea)
 local activeSlider = nil
@@ -809,23 +812,61 @@ function EX.applyVisualTheme(themeName)
         })
         tw:Play()
     end
+    -- Decoracao animada exclusiva para cada tema (topo e rodape).
+    local themeDecor = {
+        Halloween = {"🦇", "🎃", "🕸️", "🦇"},
+        Midnight = {"🌙", "✦", "星", "✧"},
+        Cyberpunk = {"⌁", "ネ", "◇", "⚡"},
+        Ocean = {"🐟", "🫧", "〰", "🐚"},
+        Sakura = {"🌸", "✿", "🌺", "❀"},
+        Emerald = {"🍃", "❧", "☘", "✦"},
+        Crimson = {"◆", "✦", "♦", "✧"},
+        Arctic = {"❄", "✧", "❅", "❄"},
+        Sunset = {"☀", "☁", "✦", "◒"}
+    }
+    local symbols = themeDecor[themeName] or themeDecor.Midnight
     local deco = Instance.new("Frame")
-    deco.Name = "ThemeHalloweenDecor"; deco.BackgroundTransparency = 1
+    deco.Name = "ThemeDecorFX"; deco.BackgroundTransparency = 1
     deco.ClipsDescendants = true; deco.Size = UDim2.new(1, 0, 1, 0)
-    deco.ZIndex = 29; deco.Parent = TopBar
-    local symbols = {"🦇", "🎃", "🦇", "🎃"}
+    deco.ZIndex = 29; deco.Parent = fx
     local rng = Random.new()
     for i, symbol in ipairs(symbols) do
         local item = Instance.new("TextLabel")
         item.Name = "ThemeDecor" .. i; item.BackgroundTransparency = 1
         item.Text = symbol; item.TextSize = (i % 2 == 0) and 17 or 14
+        item.TextColor3 = (i % 2 == 0) and cfg.secondary or cfg.accent
         item.TextTransparency = 0.12; item.Size = UDim2.fromOffset(26, 24)
         item.Position = UDim2.new(rng:NextNumber(0.12, 0.88), 0, rng:NextNumber(0.05, 0.65), 0)
-        item.Rotation = rng:NextInteger(-15, 15); item.ZIndex = 30; item.Parent = deco
+        item.Rotation = rng:NextInteger(-15, 15); item.ZIndex = 30; item.Active = false; item.Parent = deco
         local drift = UDim2.new(rng:NextNumber(-0.08, 0.08), 0, rng:NextNumber(-0.12, 0.12), 0)
         TweenService:Create(item, TweenInfo.new(rng:NextNumber(2.4, 4.2), Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
             Position = item.Position + drift, Rotation = item.Rotation + rng:NextInteger(-18, 18),
             TextTransparency = 0.48
+        }):Play()
+    end
+
+    -- Rodape da navegacao: usa os mesmos simbolos do tema e nao bloqueia cliques.
+    local oldNavFx = Sidebar:FindFirstChild("ThemeNavFX")
+    if oldNavFx then oldNavFx:Destroy() end
+    local navFx = Instance.new("Frame")
+    navFx.Name = "ThemeNavFX"; navFx.BackgroundTransparency = 1
+    navFx.Size = UDim2.fromScale(1, 1); navFx.ZIndex = 20; navFx.Parent = ThemeNavFooter
+    ThemeNavFooter.BackgroundColor3 = cfg.panel
+    ThemeNavFooterLine.BackgroundColor3 = cfg.accent
+    ThemeNavFooterTitle.TextColor3 = cfg.secondary
+    local footerSymbols = {symbols[1], symbols[2], symbols[3]}
+    for i, symbol in ipairs(footerSymbols) do
+        local item = Instance.new("TextLabel")
+        item.Name = "FooterDecor" .. i; item.BackgroundTransparency = 1
+        item.Text = symbol; item.TextSize = 15
+        item.TextColor3 = (i % 2 == 0) and cfg.secondary or cfg.accent
+        item.Size = UDim2.fromOffset(22, 20)
+        item.Position = UDim2.new((i - 1) * 0.34 + 0.08, 0, 0.52, -3)
+        item.AnchorPoint = Vector2.new(0, 0.5)
+        item.ZIndex = 21; item.Active = false; item.Parent = navFx
+        TweenService:Create(item, TweenInfo.new(1.8 + i * 0.35, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+            Position = item.Position + UDim2.fromOffset(0, -7),
+            Rotation = (i % 2 == 0) and 12 or -12
         }):Play()
     end
     if EX.decorate then pcall(EX.decorate, GUI) end
