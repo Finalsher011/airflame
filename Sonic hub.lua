@@ -1305,7 +1305,7 @@ local function runTrigger(cam, dt)
 end
 
 local Patched, WeaponWarned = {}, {}
-local AutoW = {list = {}, seen = setmetatable({}, {__mode = "k"}), mods = {}, last = 0, lmLast = 0, n = 0, t0 = 0, mask = "", modDone = setmetatable({}, {__mode = "k"}), scans = 0, found = {}, warned = {}}
+local AutoW = {list = {}, seen = setmetatable({}, {__mode = "k"}), mods = {}, last = 0, lmLast = 0, n = 0, t0 = 0, mask = "", modDone = setmetatable({}, {__mode = "k"}), scans = 0, found = {}, warned = {}, busy = false, sig = nil, tries = 0}
 -- Regras HEURÍSTICAS por nome de campo (lido do jogo em runtime; nada é hardcoded de build). Valores aplicados: 0 / 999 / slider.
 local WEAPON_RULES = {
     {pref = "wpn_recoil", label = "No Recoil", test = function(k) return k:find("recoil") ~= nil end, value = function() return 0 end},
@@ -1474,8 +1474,15 @@ local function weaponPatchTick()
             end
         end
     end
-    -- Scanner global desativado: varrer/require modulos de todo o jogo causa picos de CPU.
-    -- O caminho explicito GameConfig.Weapon permanece disponivel para mapeamento validado.
+    -- 2) descoberta automatica (weaponScanJob), so quando algo muda: nunca redundante, nunca todo quadro.
+    local maskS = ""; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then maskS = maskS .. r.pref end end
+    local anyOn = maskS ~= ""
+    local sig = (tool and tool.Name or "-") .. "|" .. maskS
+    if AutoW.sig ~= sig then AutoW.sig = sig; AutoW.tries = 0; AutoW.last = 0 end
+    if anyOn and not AutoW.busy and AutoW.tries < 2 and os.clock() - AutoW.last > 6 then
+        AutoW.tries = AutoW.tries + 1; AutoW.last = os.clock(); AutoW.busy = true
+        task.spawn(function() pcall(weaponScanJob, tool, char); AutoW.busy = false end)
+    end
     for i = #AutoW.list, 1, -1 do
         local e = AutoW.list[i]; local on = get(e.rule.pref, false)
         local ok = pcall(function() local want = on and e.rule.value(e.orig) or e.orig; if readRef(e) ~= want then writeRef(e, want) end end)
@@ -2121,4 +2128,3 @@ do
     task.wait(0.25)
     if EX.revealCard then pcall(EX.revealCard) end
 end
-                                                                                                                                                                         
