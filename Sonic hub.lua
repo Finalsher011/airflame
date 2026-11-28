@@ -844,22 +844,22 @@ local function PAL(bg, panel, card, track, stroke, text, sub, accent)
 end
 EX.Themes = {
     {name = "Eclypse", pal = PAL({0, 0, 0}, {10, 10, 10}, {18, 18, 18}, {32, 32, 32}, {44, 44, 44}, {255, 255, 255}, {150, 150, 160}, {255, 40, 60}),
-        fx = {border = "pulse", glow = {pos = "bottom", col = C3(255, 40, 60), base = 0.72, amp = 0.08, speed = 1.4},
+        fx = {border = "pulse", glow = {pos = "bottom", col = C3(255, 40, 60), base = 0.72, amp = 0.08, speed = 1.4}, moon = {col = C3(255, 40, 60), size = 42, x = 0.88, y = 0.15, speed = 0.6},,
             em = {{n = 14, shape = "circle", size = {2, 4}, col = {C3(255, 60, 80), C3(255, 130, 140)}, tr = {0.45, 0.8}, vx = {-0.01, 0.01}, vy = {-0.12, -0.04}, twinkle = 1.6}}}},
     {name = "Overworld", pal = PAL({150, 190, 240}, {196, 128, 86}, {252, 246, 230}, {222, 208, 178}, {70, 45, 30}, {48, 32, 26}, {110, 86, 72}, {222, 52, 48}),
         fx = {strip = {col = C3(96, 186, 72), edge = C3(70, 140, 52)}, orb = {col = C3(255, 214, 90), size = 54, x = 0.88, y = 0.13, speed = 1.3},
             em = {{n = 5, shape = "cloud", size = {70, 120}, col = {C3(255, 255, 255)}, tr = {0.1, 0.3}, vx = {0.008, 0.02}, vy = {0, 0}, y = {0.02, 0.5}},
                 {n = 7, shape = "diamond", size = {5, 8}, col = {C3(255, 205, 60)}, tr = {0.1, 0.4}, vx = {-0.004, 0.004}, vy = {-0.06, -0.025}, spin = 90, twinkle = 3}}}},
     {name = "Halloween", pal = PAL({22, 10, 30}, {34, 16, 44}, {46, 24, 58}, {64, 36, 78}, {110, 60, 20}, {255, 236, 214}, {190, 150, 120}, {255, 120, 20}),
-        fx = {border = "flicker", orb = {col = C3(255, 232, 160), size = 50, x = 0.88, y = 0.14, speed = 0.9},
-            em = {{n = 3, shape = "diamond", size = {10, 14}, col = {C3(10, 4, 16)}, tr = {0.1, 0.25}, vx = {0.05, 0.09}, vy = {0, 0}, y = {0.08, 0.45}, sway = {0.01, 2}, flap = 9},
+        fx = {border = "flicker", moon = {col = C3(200, 36, 36), size = 46, x = 0.88, y = 0.14, speed = 0.7}, pumpkin = {col = C3(255, 120, 20), size = 30, x = 0.1, y = 0.82},
+            em = {{n = 5, shape = "diamond", size = {13, 19}, col = {C3(10, 4, 16)}, tr = {0.05, 0.18}, vx = {0.055, 0.1}, vy = {0, 0}, y = {0.07, 0.42}, sway = {0.012, 2.2}, flap = 10},
                 {n = 16, shape = "circle", size = {2, 4}, col = {C3(255, 140, 30), C3(255, 190, 60)}, tr = {0.2, 0.6}, vx = {-0.01, 0.01}, vy = {-0.1, -0.04}, twinkle = 4},
                 {n = 2, shape = "bar", fullWidth = true, h = 0.16, col = {C3(150, 110, 190)}, tr = {0.9, 0.95}, y = {0.55, 0.85}, bob = 0.5, sw = {0.3, 0.6}}}}},
     {name = "Light", pal = PAL({236, 238, 244}, {222, 226, 236}, {255, 255, 255}, {206, 210, 222}, {196, 200, 214}, {28, 30, 40}, {100, 106, 124}, {64, 120, 255}),
         fx = {sweep = true,
             em = {{n = 12, shape = "circle", size = {10, 26}, col = {C3(120, 170, 255), C3(255, 170, 210), C3(160, 230, 200)}, tr = {0.8, 0.92}, vx = {-0.006, 0.006}, vy = {-0.03, -0.012}, sway = {0.01, 0.8}}}}},
     {name = "Dark", pal = PAL({10, 12, 18}, {16, 19, 28}, {24, 28, 40}, {40, 46, 62}, {52, 58, 78}, {240, 244, 255}, {140, 150, 175}, {110, 130, 255}),
-        fx = {border = "pulse", glow = {pos = "top", col = C3(110, 130, 255), base = 0.8, amp = 0.08, speed = 0.8},
+        fx = {border = "pulse", glow = {pos = "top", col = C3(110, 130, 255), base = 0.8, amp = 0.08, speed = 0.8}, moon = {col = C3(200, 215, 255), size = 40, x = 0.1, y = 0.13, speed = 0.5},,
             em = {{n = 26, shape = "circle", size = {1, 3}, col = {C3(255, 255, 255), C3(170, 190, 255)}, tr = {0.2, 0.7}, vx = {-0.004, 0.004}, vy = {-0.006, 0.006}, twinkle = 2.5}}}},
     {name = "Underground", pal = PAL({14, 22, 30}, {20, 34, 44}, {28, 46, 58}, {44, 70, 86}, {60, 96, 112}, {220, 245, 250}, {130, 170, 184}, {60, 220, 200}),
         fx = {glow = {pos = "bottom", col = C3(40, 200, 190), base = 0.74, amp = 0.06, speed = 1.0},
@@ -960,6 +960,27 @@ local function decoStrip(layer, s)
     local b = mkFrame(root, s.edge); b.AnchorPoint = Vector2.new(0, 1); b.Position = UDim2.new(0, 0, 1, -8); b.Size = UDim2.new(1, 0, 0, 2)
     return {inst = root, step = function() end}
 end
+local function decoMoon(layer, m)
+    local root = Instance.new("Frame"); root.BackgroundTransparency = 1; root.BorderSizePixel = 0; root.ZIndex = 0; root.Active = false; root.Size = UDim2.fromScale(1, 1); root.Parent = layer
+    local halo = mkFrame(root, m.col); rounded(halo); halo.AnchorPoint = Vector2.new(0.5, 0.5); halo.Position = UDim2.fromScale(m.x, m.y); halo.Size = UDim2.fromOffset(m.size * 2.1, m.size * 2.1); halo.BackgroundTransparency = 0.88
+    local body = mkFrame(root, m.col); rounded(body); body.AnchorPoint = Vector2.new(0.5, 0.5); body.Position = UDim2.fromScale(m.x, m.y); body.Size = UDim2.fromOffset(m.size, m.size); body.BackgroundTransparency = 0.12
+    local cut = mkFrame(root, Theme.bg); rounded(cut); cut.AnchorPoint = Vector2.new(0.5, 0.5); cut.Position = UDim2.fromScale(m.x + 0.028, m.y - 0.012); cut.Size = UDim2.fromOffset(m.size * 0.86, m.size * 0.86); cut.BackgroundTransparency = 0
+    return {inst = root, step = function(t) halo.BackgroundTransparency = math.clamp(0.88 + math.sin(t * (m.speed or 0.8)) * 0.05, 0.8, 0.95); body.Position = UDim2.fromScale(m.x, m.y + math.sin(t * (m.speed or 0.8) * 0.5) * 0.01) end}
+end
+local function decoPumpkin(layer, p)
+    local root = Instance.new("Frame"); root.BackgroundTransparency = 1; root.BorderSizePixel = 0; root.ZIndex = 0; root.Active = false; root.Size = UDim2.fromScale(1, 1); root.Parent = layer
+    local glow = mkFrame(root, p.col); rounded(glow); glow.AnchorPoint = Vector2.new(0.5, 0.5); glow.Position = UDim2.fromScale(p.x, p.y); glow.Size = UDim2.fromOffset(p.size * 1.8, p.size * 1.8); glow.BackgroundTransparency = 0.85
+    local body = mkFrame(root, p.col); rounded(body); body.AnchorPoint = Vector2.new(0.5, 0.5); body.Position = UDim2.fromScale(p.x, p.y); body.Size = UDim2.fromOffset(p.size, p.size * 0.86); body.BackgroundTransparency = 0.08
+    local stem = mkFrame(root, C3(70, 110, 40)); stem.AnchorPoint = Vector2.new(0.5, 1); stem.Position = UDim2.new(p.x, 0, p.y, -p.size * 0.4); stem.Size = UDim2.fromOffset(p.size * 0.12, p.size * 0.22)
+    local function eye(dx) local f = mkFrame(root, Color3.new(0, 0, 0)); f.Rotation = 45; f.AnchorPoint = Vector2.new(0.5, 0.5); f.Position = UDim2.new(p.x + dx, 0, p.y, -p.size * 0.08); f.Size = UDim2.fromOffset(p.size * 0.14, p.size * 0.14); return f end
+    local eyeL, eyeR = eye(-0.045), eye(0.045)
+    local mouth = mkFrame(root, Color3.new(0, 0, 0)); mouth.AnchorPoint = Vector2.new(0.5, 0.5); mouth.Position = UDim2.new(p.x, 0, p.y, p.size * 0.16); mouth.Size = UDim2.fromOffset(p.size * 0.34, p.size * 0.08)
+    return {inst = root, step = function(t)
+        local flick = 0.08 + math.sin(t * 6.5) * 0.015 + (math.random() < 0.02 and 0.1 or 0)
+        glow.BackgroundTransparency = 0.8 + flick; body.BackgroundTransparency = 0.04 + flick * 0.3
+        body.Position = UDim2.fromScale(p.x, p.y + math.sin(t * 1.1) * 0.012)
+    end}
+end
 local function decoSweep(layer)
     local f = mkFrame(layer, Color3.new(1, 1, 1)); f.AnchorPoint = Vector2.new(0.5, 0.5); f.Size = UDim2.new(0.16, 0, 1.8, 0); f.Rotation = 20
     local g = Instance.new("UIGradient")
@@ -981,6 +1002,8 @@ function EX.fxRefresh()
         if fx.orb then F.deco[#F.deco + 1] = decoOrb(layer, fx.orb) end
         if fx.strip then F.deco[#F.deco + 1] = decoStrip(layer, fx.strip) end
         if fx.sweep then F.deco[#F.deco + 1] = decoSweep(layer) end
+        if fx.moon then F.deco[#F.deco + 1] = decoMoon(layer, fx.moon) end
+        if fx.pumpkin then F.deco[#F.deco + 1] = decoPumpkin(layer, fx.pumpkin) end
         F.border = fx.border
     end
     if useParts and fx.em then
@@ -2146,7 +2169,7 @@ local WEAPON_RULES = {
     {pref = "wpn_spread", label = "No Spread", test = function(k) return k:find("spread") ~= nil or k:find("inaccura") ~= nil or k:find("bloom") ~= nil end, value = function() return 0 end},
     {pref = "wpn_reload", label = "Instant Reload", test = function(k) return k:find("reload") ~= nil and (k:find("time") ~= nil or k:find("duration") ~= nil or k:find("delay") ~= nil or k == "reload") end, value = function() return 0 end},
     {pref = "wpn_ammo", label = "Infinite Magazine", test = function(k) return (k:find("ammo") ~= nil or k:find("clip") ~= nil or k:find("magazine") ~= nil) and k:find("max") == nil end, value = function() return 999 end},
-    {pref = "wpn_cd", label = "Custom Fire Cooldown", test = function(k) return k:find("cooldown") ~= nil or k:find("firedelay") ~= nil or k:find("fire_delay") ~= nil or k:find("shootdelay") ~= nil or k:find("shotdelay") ~= nil or k:find("firetime") ~= nil or k:find("timebetween") ~= nil or k:find("fireinterval") ~= nil or k:find("shootinterval") ~= nil or k:find("attackdelay") ~= nil or k == "delay" or k == "cd" end,
+    {pref = "wpn_cd", label = "Custom Fire Cooldown", test = function(k) return k:find("cooldown") ~= nil or k:find("firedelay") ~= nil or k:find("fire_delay") ~= nil or k:find("shootdelay") ~= nil or k:find("shotdelay") ~= nil or k:find("firetime") ~= nil or k:find("timebetween") ~= nil or k:find("fireinterval") ~= nil or k:find("shootinterval") ~= nil or k:find("attackdelay") ~= nil end,
         value = function(orig) local ms = getNum("wpn_cdval", 500); if type(orig) == "number" and orig >= 10 then return ms end; return ms / 1000 end},
 }
 local RuleKeys, RuleKeysN = {}, 0
@@ -2190,7 +2213,7 @@ local function scanInstance(root, limit)
         end
     end
     visit(root)
-    for _, d in ipairs(root:GetDescendants()) do n = n + 1; if n > limit then break end; visit(d) end
+    for _, d in ipairs(root:GetDescendants()) do n = n + 1; if n > limit then break end; visit(d); if n % 60 == 0 and os.clock() - AutoW.t0 > 0.0015 then task.wait(); AutoW.t0 = os.clock() end end
 end
 local function modulesNamed(name)
     local key = name:lower()
@@ -2200,7 +2223,7 @@ local function modulesNamed(name)
     for _, d in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do if d:IsA("ModuleScript") and d.Name:lower() == key then c[#c + 1] = d end end
     return c
 end
-local WEAPON_MOD_HINT = {"weapon", "gun", "firearm", "tool", "arsenal", "loadout", "shoot", "combat", "fire", "item", "stat", "config", "setting", "data", "viewmodel", "ammo", "bullet", "projectile", "recoil"}
+local WEAPON_MOD_HINT = {"weapon", "gun", "firearm", "arsenal", "loadout", "viewmodel", "gunplay", "firemode", "ammo", "bullet", "projectile", "recoil"}
 local WEAPON_MOD_SKIP = {"shop", "store", "price", "currency", "quest", "mission", "chat", "leaderboard", "sound", "audio", "anim", "emote", "menu"}
 local function weaponishModule(m)
     local own = m.Name:lower()
@@ -2280,7 +2303,7 @@ local function weaponScanJob(tool, char)
                     if ok2 and type(t) == "table" then pcall(scanTable, t, 0, {}, m:GetFullName()) end
                 end
             end
-            if i % 40 == 0 and os.clock() - AutoW.t0 > 0.0015 then task.wait(); AutoW.t0 = os.clock() end
+            if os.clock() - AutoW.t0 > 0.0015 then task.wait(); AutoW.t0 = os.clock() end
         end
     end
     for _, rule in ipairs(WEAPON_RULES) do
