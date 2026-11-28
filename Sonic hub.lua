@@ -947,6 +947,46 @@ local function guard(name, fn) return function(...)
 end end
 local Cap = {mousemoverel = mousemoverel, mouse1click = mouse1click, hookmetamethod = hookmetamethod, newcclosure = newcclosure, checkcaller = checkcaller, getnamecallmethod = getnamecallmethod, setnamecallmethod = setnamecallmethod, getloadedmodules = getloadedmodules, require = require}
 local GameConfig = {Build = "UNSET", Debug = true, Probe = true, Weapon = {ToolModule = nil, Fields = {NoRecoil = nil, NoSpread = nil, InstantReload = nil, InfiniteMagazine = nil, FireCooldown = nil}}, SpectateProbe = nil}
+
+-- Roteador universal: identifica os dois jogos e aplica somente metadados/perfis seguros de interface.
+-- Nao altera visibilidade de jogadores, mira, hitbox, armas, rede ou mecanismos anti-cheat.
+local GAME_PROFILES = {
+    [90568084448279] = {
+        Name = "Um Toque",
+        Build = "UNTOQUE",
+        VisualPreset = "Precision",
+        TrainingOnly = true,
+        Description = "Perfil de interface e treino local"
+    },
+    [84556640895285] = {
+        Name = "Arena de Deagle",
+        Build = "DEAGLE_ARENA",
+        VisualPreset = "Precision",
+        TrainingOnly = true,
+        Description = "Perfil de interface e treino local"
+    }
+}
+local function detectGameProfile()
+    local placeId = game.PlaceId
+    local profile = GAME_PROFILES[placeId]
+    if profile then
+        EX.GameProfile = profile
+        GameConfig.Build = profile.Build
+        print("[Eclypse] Jogo reconhecido: " .. profile.Name .. " | perfil: " .. profile.Description)
+    else
+        EX.GameProfile = {
+            Name = "Universal",
+            Build = "UNIVERSAL",
+            VisualPreset = "Default",
+            TrainingOnly = true,
+            Description = "Perfil universal seguro"
+        }
+        GameConfig.Build = "UNIVERSAL"
+        print("[Eclypse] Jogo nao cadastrado (PlaceId " .. tostring(placeId) .. "); usando perfil universal.")
+    end
+    return EX.GameProfile
+end
+local ActiveGameProfile = detectGameProfile()
 local Fire = {last = 0}
 local function clickFire() Fire.last = os.clock(); if type(Cap.mouse1click) == "function" then local ok = pcall(Cap.mouse1click); if ok then return end end; pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new()) end) end
 local function activateTool() Fire.last = os.clock(); local c = LP.Character; local t = c and c:FindFirstChildOfClass("Tool"); if t then pcall(function() t:Activate() end) end end
