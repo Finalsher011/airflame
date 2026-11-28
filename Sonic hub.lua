@@ -1,4 +1,4 @@
--- Eclypse V30 (base: V29) | novo: animacoes (toast, troca de aba, hover, dropdown), abas Hitbox/Bots/Safety, configuracoes completas, menos carga por frame. Historico V29: | logo da foto do usuario (PNG transparente, 3 niveis de carregamento), cor do menu configuravel, efeitos ao abrir, otimizacoes de desempenho (cache de visibilidade, mira a 30Hz, ESP a 100Hz, profiler)
+-- Eclypse V32 (base: V31/eclypse5) | Custom Fire Cooldown agora controla de fato o intervalo do Rapid Fire; deteccao de jogo tambem via GameId; BloxStrike listado (nao confirmado)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -965,13 +965,18 @@ local GAME_PROFILES = {
         Description = "Perfil de interface e treino local"
     }
 }
+local GAME_PROFILES_BY_ID = {
+    -- GameId (game.GameId / universeId) confirmado por fonte publica; preencha Toggles quando souber o que ajuda nesse jogo.
+    [7633926880] = {Name = "BloxStrike", Build = "BLOXSTRIKE", VisualPreset = "Default", TrainingOnly = false, Description = "GameId confirmado; PlaceId e Toggles ainda nao confirmados", Toggles = {}},
+}
 local function detectGameProfile()
     local placeId = game.PlaceId
-    local profile = GAME_PROFILES[placeId]
+    local profile = GAME_PROFILES[placeId] or GAME_PROFILES_BY_ID[game.GameId]
     if profile then
         EX.GameProfile = profile
         GameConfig.Build = profile.Build
-        print("[Eclypse] Jogo reconhecido: " .. profile.Name .. " | perfil: " .. profile.Description)
+        print("[Eclypse] Jogo reconhecido: " .. profile.Name .. " | perfil: " .. profile.Description .. "  |  PlaceId=" .. tostring(game.PlaceId) .. "  GameId=" .. tostring(game.GameId))
+        if profile.Toggles then for k, v in pairs(profile.Toggles) do if Prefs[k] == nil then set(k, v) end end end
     else
         EX.GameProfile = {
             Name = "Universal",
@@ -981,7 +986,7 @@ local function detectGameProfile()
             Description = "Perfil universal seguro"
         }
         GameConfig.Build = "UNIVERSAL"
-        print("[Eclypse] Jogo nao cadastrado (PlaceId " .. tostring(placeId) .. "); usando perfil universal.")
+        print("[Eclypse] Jogo nao cadastrado (PlaceId=" .. tostring(placeId) .. " GameId=" .. tostring(game.GameId) .. "); usando perfil universal. Me mande esses dois numeros e o que ajuda nesse jogo pra eu cadastrar um perfil de verdade.")
     end
     return EX.GameProfile
 end
@@ -2097,7 +2102,8 @@ local gPoll, gTrack, gCircles, gAim, gSilent, gRage, gKill, gTrig, gESP = guard(
 local gHB = guard("heartbeat", onHeartbeat)
 local gNPC = guard("npc", initNPCs)
 local rapidLast, bulletLast = 0, 0
-local gRapid = guard("rapid", function() if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then return end; if UserInputService:GetFocusedTextBox() or GUI.Enabled then return end; local now = os.clock(); if get("wpn_rapid") and now - rapidLast > 0.04 then rapidLast = now; clickFire() end; if get("trc_on") and now - bulletLast > 0.1 then bulletLast = now; spawnBulletTracer() end end)
+local function rapidGap() if get("wpn_cd", false) then return math.max(getNum("wpn_cdval", 500), 10) / 1000 end; return 0.04 end
+local gRapid = guard("rapid", function() if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then return end; if UserInputService:GetFocusedTextBox() or GUI.Enabled then return end; local now = os.clock(); if get("wpn_rapid") and now - rapidLast > rapidGap() then rapidLast = now; clickFire() end; if get("trc_on") and now - bulletLast > 0.1 then bulletLast = now; spawnBulletTracer() end end)
 
 -- Mira só roda em partida: menu fechado, sem caixa de texto, personagem vivo e mouse travado no centro (cursor livre = lobby/menu do jogo)
 local function aimAllowed()
