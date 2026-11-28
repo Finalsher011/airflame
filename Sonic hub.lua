@@ -3,7 +3,6 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
-local VirtualUser = game:GetService("VirtualUser")
 local RunService = game:GetService("RunService")
 local ContextActionService = game:GetService("ContextActionService")
 local Debris = game:GetService("Debris")
@@ -2088,7 +2087,7 @@ end
 pcall(function() RunService:UnbindFromRenderStep("DrxMain") end)
 RunService:BindToRenderStep("DrxMain", Enum.RenderPriority.Camera.Value + 1, function(dt) FrameNo = FrameNo + 1; fpsAvg = fpsAvg + (1 / math.max(dt, 1e-4) - fpsAvg) * 0.05; gPoll(); local cam = Workspace.CurrentCamera; if not cam then return end; if get("aim_on") or get("sil_on") or get("rage_on") or get("trg_on") then gNPC() end; if get("aim_on") or get("sil_on") or get("rage_on") or get("trg_on") or get("ra_kill") or get("esp_path") then gTrack() end; gCircles(cam); if HB.paused or not aimAllowed() then Silent.target = nil; Silent.shooting = false else gAim(cam, dt); gSilent(cam, dt); gRage(cam, dt); gKill(cam, dt); gTrig(cam, dt) end; gESP(cam, dt); gRapid(); if os.clock() - EX.profT > 15 then EX.profReport() end end)
 Conns[#Conns + 1] = RunService.Heartbeat:Connect(function(dt) gHB(dt) end)
-Conns[#Conns + 1] = LP.Idled:Connect(function() if get("misc_afk") then pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton2(Vector2.new()) end) end end)
+-- Sem simulacao de entrada AFK via VirtualUser; o Roblox controla a inatividade normalmente.
 
 local dragging, dragStart, startPos = false, nil, nil
 local function menuMatch(input, mk) return (input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == mk.Key) or (input.UserInputType == Enum.UserInputType.MouseButton1 and mk.Key == "LMB") or (input.UserInputType == Enum.UserInputType.MouseButton2 and mk.Key == "RMB") or (input.UserInputType == Enum.UserInputType.MouseButton3 and mk.Key == "MMB") end
