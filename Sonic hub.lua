@@ -809,6 +809,25 @@ function EX.applyVisualTheme(themeName)
         })
         tw:Play()
     end
+    local deco = Instance.new("Frame")
+    deco.Name = "ThemeHalloweenDecor"; deco.BackgroundTransparency = 1
+    deco.ClipsDescendants = true; deco.Size = UDim2.new(1, 0, 1, 0)
+    deco.ZIndex = 29; deco.Parent = TopBar
+    local symbols = {"🦇", "🎃", "🦇", "🎃"}
+    local rng = Random.new()
+    for i, symbol in ipairs(symbols) do
+        local item = Instance.new("TextLabel")
+        item.Name = "ThemeDecor" .. i; item.BackgroundTransparency = 1
+        item.Text = symbol; item.TextSize = (i % 2 == 0) and 17 or 14
+        item.TextTransparency = 0.12; item.Size = UDim2.fromOffset(26, 24)
+        item.Position = UDim2.new(rng:NextNumber(0.12, 0.88), 0, rng:NextNumber(0.05, 0.65), 0)
+        item.Rotation = rng:NextInteger(-15, 15); item.ZIndex = 30; item.Parent = deco
+        local drift = UDim2.new(rng:NextNumber(-0.08, 0.08), 0, rng:NextNumber(-0.12, 0.12), 0)
+        TweenService:Create(item, TweenInfo.new(rng:NextNumber(2.4, 4.2), Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+            Position = item.Position + drift, Rotation = item.Rotation + rng:NextInteger(-18, 18),
+            TextTransparency = 0.48
+        }):Play()
+    end
     if EX.decorate then pcall(EX.decorate, GUI) end
 end
 -- ===== END THEME ENGINE =====
@@ -1031,21 +1050,19 @@ function EX.pickTargetCached(key, o)
     local r = pickTarget(o); EX.pickCache[key] = {t = now, r = r or false}; return r
 end
 local function stepAlpha(a60, dt) return 1 - (1 - math.clamp(a60, 0, 1)) ^ (math.clamp(dt, 0, 0.1) * 60) end
-local function aimStep(target, alpha)
-    local cam = Workspace.CurrentCamera; if not cam then return end
-    local v, on = cam:WorldToViewportPoint(target.pos); local vs = cam.ViewportSize
-    if on and type(Cap.mousemoverel) == "function" then
-        local dx, dy = (v.X - vs.X / 2) * alpha, (v.Y - vs.Y / 2) * alpha; local mag = math.sqrt(dx * dx + dy * dy); if mag > 80 then dx, dy = dx / mag * 80, dy / mag * 80 end
-        if pcall(Cap.mousemoverel, dx, dy) then return end
-    end
-    local a = alpha
-    if on and not MouseDeltaHook.installed and ensureIndexHook then ensureIndexHook() end
-    if on and MouseDeltaHook.installed then
-        local p = MouseDeltaHook.pending + Vector2.new((v.X - vs.X / 2) * alpha * 0.5, (v.Y - vs.Y / 2) * alpha * 0.5)
-        if p.Magnitude > 150 then p = p.Unit * 150 end
-        MouseDeltaHook.pending = p; a = alpha * 0.5
-    end
-    cam.CFrame = cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position, target.pos), a)
+local function aimStep(target, alpha, dt)
+    local cam = Workspace.CurrentCamera
+    if not cam or type(Cap.mousemoverel) ~= "function" then return end
+    local v, on = cam:WorldToViewportPoint(target.pos)
+    if not on then return end
+    local vs = cam.ViewportSize
+    local dx = (v.X - vs.X * 0.5) * math.clamp(alpha, 0, 1)
+    local dy = (v.Y - vs.Y * 0.5) * math.clamp(alpha, 0, 1)
+    local frameScale = math.clamp((dt or 1/60) * 60, 0, 1.5)
+    local mag = math.sqrt(dx * dx + dy * dy)
+    local maxStep = 10 * frameScale
+    if mag > maxStep and mag > 0 then dx, dy = dx / mag * maxStep, dy / mag * maxStep end
+    if math.abs(dx) + math.abs(dy) > 0.01 then pcall(Cap.mousemoverel, dx, dy) end
 end
 
 local Aim = {char = nil, since = 0}
@@ -1163,7 +1180,7 @@ local Rage, Kill = {last = 0}, {last = 0}
 local function runRage(cam, dt)
     if not (get("rage_on") and bindActive("rage_key")) then return end
     local t = EX.pickTargetCached("rage", {part = "Head", radius = getNum("rage_fovsize", 720), maxDist = 5000, angle = getNum("rage_fov", 120), wall = not get("rage_wall", false), prio = "Cursor", wc = 1, wd = 0, wf = 0, offscreen = true, predict = false, sample = 100, jitter = 0, teamCheck = get("rage_team", true)})
-    if not t then return end; aimStep(t, stepAlpha(0.5, dt))
+    if not t then return end; aimStep(t, stepAlpha(0.5, dt), dt)
     if bindActive("rage_autoshoot") and t.cursor < 25 then local gap = get("wpn_rapid") and 0.03 or 0.08; if os.clock() - Rage.last > gap then Rage.last = os.clock(); clickFire() end end
 end
 local function runKillAll(cam, dt)
@@ -1377,16 +1394,8 @@ local function weaponPatchTick()
             end
         end
     end
-    -- 2) descoberta automática por nome de campo (em thread separada: nunca varre no frame do Heartbeat)
-    local anyOn = false; for _, r in ipairs(WEAPON_RULES) do if get(r.pref, false) then anyOn = true end end
-    if anyOn and not AutoW.busy and os.clock() - AutoW.last > 5 then
-        AutoW.busy = true
-        task.spawn(function()
-            local okc, errc = pcall(weaponScanJob, tool, char)
-            AutoW.last = os.clock(); AutoW.busy = false
-            if not okc and not AutoW.warned.job then AutoW.warned.job = true; warn("[Eclypse] varredura de armas: " .. tostring(errc)) end
-        end)
-    end
+    -- Scanner global desativado: varrer/require modulos de todo o jogo causa picos de CPU.
+    -- O caminho explicito GameConfig.Weapon permanece disponivel para mapeamento validado.
     for i = #AutoW.list, 1, -1 do
         local e = AutoW.list[i]; local on = get(e.rule.pref, false)
         local ok = pcall(function() local want = on and e.rule.value(e.orig) or e.orig; if readRef(e) ~= want then writeRef(e, want) end end)
@@ -1569,7 +1578,7 @@ local function onHeartbeat(dt)
         else stopFly() end
     else stopFly() end
     if HB.mid >= 0.1 then HB.mid = 0; local active = get("cam_third") and bindActive("cam_key"); if active then local d = getNum("cam_dist", 12); LP.CameraMode = Enum.CameraMode.Classic; LP.CameraMaxZoomDistance = d; LP.CameraMinZoomDistance = d; HB.tp = true elseif HB.tp then HB.tp = false; LP.CameraMaxZoomDistance = 128; LP.CameraMinZoomDistance = 0.5 end end
-    if HB.slow >= 0.5 then HB.slow = 0; EX.timed("weaponPatchTick", weaponPatchTick); local want = get("misc_spect") or get("misc_antispect"); if want and os.clock() - (HB.specAt or 0) > 1.5 then HB.specAt = os.clock(); HB.specs = currentSpectators() end; local specs = want and (HB.specs or {}) or {}; if get("misc_spect") and #specs > 0 then Hud.spec.Text = "Spectators\n" .. table.concat(specs, "\n"); Hud.spec.Visible = true else Hud.spec.Visible = false end; local pause = get("misc_antispect") and #specs > 0; if pause ~= HB.paused then HB.paused = pause; notify("Anti Spectate", pause and "features paused" or "features resumed") end end
+    if HB.slow >= 0.5 then HB.slow = 0; local want = get("misc_spect") or get("misc_antispect"); if want and os.clock() - (HB.specAt or 0) > 1.5 then HB.specAt = os.clock(); HB.specs = currentSpectators() end; local specs = want and (HB.specs or {}) or {}; if get("misc_spect") and #specs > 0 then Hud.spec.Text = "Spectators\n" .. table.concat(specs, "\n"); Hud.spec.Visible = true else Hud.spec.Visible = false end; local pause = get("misc_antispect") and #specs > 0; if pause ~= HB.paused then HB.paused = pause; notify("Anti Spectate", pause and "features paused" or "features resumed") end end
     if HB.hud >= 0.2 then HB.hud = 0; EX.timed("updateHud", updateHud, fpsAvg) end
 end
 
